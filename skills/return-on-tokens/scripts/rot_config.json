@@ -1,0 +1,149 @@
+{
+  "_comment": "Premissas editáveis do ROT (Return on Tokens). Todo número daqui é uma escolha sua: o relatório avisa a fonte e a data, e não busca cotação nem tabela de preço ao vivo.",
+
+  "pricing_source": "https://platform.claude.com/docs/en/about-claude/pricing",
+  "pricing_checked": "2026-10-23",
+  "_pricing_note": "Dólares por milhão de tokens, preço de lista global da API do Claude (não é Bedrock regional, não é lote, não inclui desconto). cache_write_5m = gravação de cache de 5 minutos (1,25× a entrada na tabela publicada). cache_write_1h = gravação de 1 hora (2× a entrada). cache_read = leitura de cache. Conferido em 2026-10-23 na página acima e em https://claude.com/pricing. Quando a Anthropic mudar o preço, edite a linha. Um id de modelo sem linha não recebe preço inventado: os tokens entram no volume e ficam de fora do dólar, com aviso.",
+
+  "month_days": 30.4375,
+  "_month_days_note": "365,25 / 12. A assinatura proporcional é mensalidade × (dias do período / month_days). Trinta dias não são exatamente uma fatura.",
+
+  "usd_brl": 5.0383,
+  "usd_brl_checked": "2026-10-22",
+  "usd_brl_source": "https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/ — PTAX venda, Banco Central do Brasil, 22/10/2026 (5,0383). Edite para o câmbio que quiser usar. null ou 0 desliga a conversão para reais. O dólar continua sendo a moeda base.",
+
+  "default_plan": "",
+  "_default_plan_note": "Vazio faz o comando perguntar. Para pular a pergunta: api, pro-monthly, pro-annual, max-5x ou max-20x. Também dá para usar a variável de ambiente ROT_PLAN.",
+
+  "production_branch": "",
+  "_production_branch_note": "Vazio detecta o ramo padrão (origin/HEAD, depois main, master, trunk). Preencha para forçar o ramo que você trata como produção.",
+
+  "models": {
+    "_comment": "Prefixo do id que aparece no log. 'claude-sonnet-4-6-20260217' e 'claude-opus-4-6[1m]' casam com a chave mais longa. Os nomes abaixo são os da tabela publicada; não há apelido genérico para modelo desconhecido.",
+    "claude-fable-5-1": {"input": 10.0, "output": 50.0, "cache_write_5m": 12.5, "cache_write_1h": 20.0, "cache_read": 0.25},
+    "claude-fable-5": {"input": 10.0, "output": 50.0, "cache_write_5m": 12.5, "cache_write_1h": 20.0, "cache_read": 1.0},
+    "claude-mythos-5-1": {"input": 10.0, "output": 50.0, "cache_write_5m": 12.5, "cache_write_1h": 20.0, "cache_read": 0.25},
+    "claude-mythos-5": {"input": 10.0, "output": 50.0, "cache_write_5m": 12.5, "cache_write_1h": 20.0, "cache_read": 1.0},
+    "claude-opus-5-5": {"input": 4.0, "output": 20.0, "cache_write_5m": 5.0, "cache_write_1h": 8.0, "cache_read": 0.20},
+    "claude-opus-5.5": {"input": 4.0, "output": 20.0, "cache_write_5m": 5.0, "cache_write_1h": 8.0, "cache_read": 0.20},
+    "claude-opus-5": {"input": 5.0, "output": 25.0, "cache_write_5m": 6.25, "cache_write_1h": 10.0, "cache_read": 0.50},
+    "claude-opus-4-8": {"input": 5.0, "output": 25.0, "cache_write_5m": 6.25, "cache_write_1h": 10.0, "cache_read": 0.50},
+    "claude-opus-4-7": {"input": 5.0, "output": 25.0, "cache_write_5m": 6.25, "cache_write_1h": 10.0, "cache_read": 0.50},
+    "claude-opus-4-6": {"input": 5.0, "output": 25.0, "cache_write_5m": 6.25, "cache_write_1h": 10.0, "cache_read": 0.50},
+    "claude-opus-4-5": {"input": 5.0, "output": 25.0, "cache_write_5m": 6.25, "cache_write_1h": 10.0, "cache_read": 0.50},
+    "claude-opus-4-1": {"input": 15.0, "output": 75.0, "cache_write_5m": 18.75, "cache_write_1h": 30.0, "cache_read": 1.50},
+    "claude-opus-4": {"input": 15.0, "output": 75.0, "cache_write_5m": 18.75, "cache_write_1h": 30.0, "cache_read": 1.50},
+    "claude-sonnet-5-5": {"input": 2.0, "output": 10.0, "cache_write_5m": 2.5, "cache_write_1h": 4.0, "cache_read": 0.10},
+    "claude-sonnet-5.5": {"input": 2.0, "output": 10.0, "cache_write_5m": 2.5, "cache_write_1h": 4.0, "cache_read": 0.10},
+    "claude-sonnet-5": {"input": 2.0, "output": 10.0, "cache_write_5m": 2.5, "cache_write_1h": 4.0, "cache_read": 0.20},
+    "claude-sonnet-4-6": {"input": 3.0, "output": 15.0, "cache_write_5m": 3.75, "cache_write_1h": 6.0, "cache_read": 0.30},
+    "claude-sonnet-4-5": {"input": 3.0, "output": 15.0, "cache_write_5m": 3.75, "cache_write_1h": 6.0, "cache_read": 0.30},
+    "claude-sonnet-4": {"input": 3.0, "output": 15.0, "cache_write_5m": 3.75, "cache_write_1h": 6.0, "cache_read": 0.30},
+    "claude-haiku-5-5": {
+      "input": 0.10,
+      "output": 0.50,
+      "cache_write_5m": 0.125,
+      "cache_write_1h": 0.20,
+      "cache_read": 0.01,
+      "_over_100k_note": "Haiku 5.5 tem faixa diferente acima de 100 mil tokens de prompt. O relatório soma entrada + gravações de cache + leitura daquela resposta e, se passar de 100.000, usa a faixa de baixo.",
+      "when_prompt_over_100k_tokens": {
+        "input": 0.50,
+        "output": 2.50,
+        "cache_write_5m": 0.625,
+        "cache_write_1h": 1.0,
+        "cache_read": 0.05
+      }
+    },
+    "claude-haiku-5.5": {
+      "input": 0.10,
+      "output": 0.50,
+      "cache_write_5m": 0.125,
+      "cache_write_1h": 0.20,
+      "cache_read": 0.01,
+      "when_prompt_over_100k_tokens": {
+        "input": 0.50,
+        "output": 2.50,
+        "cache_write_5m": 0.625,
+        "cache_write_1h": 1.0,
+        "cache_read": 0.05
+      }
+    },
+    "claude-haiku-4-5": {"input": 1.0, "output": 5.0, "cache_write_5m": 1.25, "cache_write_1h": 2.0, "cache_read": 0.10},
+    "claude-haiku-3-5": {"input": 0.80, "output": 4.0, "cache_write_5m": 1.0, "cache_write_1h": 1.60, "cache_read": 0.08},
+    "<synthetic>": {"input": 0.0, "output": 0.0, "cache_write_5m": 0.0, "cache_write_1h": 0.0, "cache_read": 0.0}
+  },
+
+  "plans": {
+    "_comment": "Mensalidades conferidas em 2026-10-23. Pro mensal e anual: https://claude.com/pricing (US$ 20/mês, ou US$ 200/ano). Max 5x US$ 100/mês e Max 20x US$ 200/mês: https://support.claude.com/en/articles/11049741-what-is-the-max-plan. Edite monthly_usd se a sua fatura for outra. Plano custom entra pela linha de comando com --monthly-usd.",
+    "api": {
+      "label": "API sob demanda",
+      "kind": "metered",
+      "monthly_usd": 0
+    },
+    "pro-monthly": {
+      "label": "Claude Pro (mensal)",
+      "kind": "subscription",
+      "monthly_usd": 20
+    },
+    "pro-annual": {
+      "label": "Claude Pro (anual)",
+      "kind": "subscription",
+      "monthly_usd": 16.666666666666668,
+      "_note": "Caixa real de US$ 200 por ano, rateado como 200/12 por mês. O site descreve isso como cerca de US$ 17/mês."
+    },
+    "max-5x": {
+      "label": "Claude Max 5x",
+      "kind": "subscription",
+      "monthly_usd": 100
+    },
+    "max-20x": {
+      "label": "Claude Max 20x",
+      "kind": "subscription",
+      "monthly_usd": 200
+    }
+  },
+
+  "exclude": {
+    "_comment": "Caminhos fora das linhas efetivas. O motivo é o primeiro que casar: lockfile, vendorizado, gerado, snapshot. Edite as listas se o seu repositório usar outros nomes.",
+    "lockfile_basenames": [
+      "package-lock.json",
+      "npm-shrinkwrap.json",
+      "yarn.lock",
+      "pnpm-lock.yaml",
+      "bun.lock",
+      "bun.lockb",
+      "Cargo.lock",
+      "Gemfile.lock",
+      "composer.lock",
+      "poetry.lock",
+      "Pipfile.lock",
+      "uv.lock",
+      "pdm.lock",
+      "go.sum",
+      "packages.lock.json",
+      "Package.resolved",
+      "Podfile.lock",
+      "flake.lock",
+      "pubspec.lock",
+      "gradle.lockfile"
+    ],
+    "vendored_path_regex": [
+      "(^|/)(vendor|third_party|third-party|node_modules|external)(/|$)"
+    ],
+    "generated_path_regex": [
+      "(^|/)(dist|build|generated|__pycache__|\\.next|coverage)(/|$)",
+      "\\.min\\.(js|css)$",
+      "\\.generated\\.",
+      "_generated\\.",
+      "\\.pb\\.(go|ts)$",
+      "_pb2\\.py$",
+      "\\.g\\.dart$",
+      "\\.pyc$"
+    ],
+    "snapshot_path_regex": [
+      "(^|/)__snapshots__(/|$)",
+      "\\.snap$",
+      "\\.snapshot$"
+    ]
+  }
+}
