@@ -1,12 +1,12 @@
-# Return on Tokens (ROT)
+# Retorno sobre Tokens (ROT)
 
 ROT mede, num período que você escolhe, quanto código chegou à produção e quanto isso custou em tokens do Claude Code. A moeda base é o dólar. O real entra por uma taxa de câmbio editável.
 
 É uma skill de Claude Code e um comando de linha. Licença MIT, copyright Pierre Schurmann.
 
-## O que é Return on Tokens (ROT)
+## O que é Retorno sobre Tokens (ROT)
 
-Return on Tokens responde uma pergunta estreita: no intervalo analisado, quantas linhas efetivas foram parar no ramo de produção, quantos tokens o Claude Code gastou nesse intervalo e qual foi o custo — o equivalente de API, pela tabela publicada, e, se você tem assinatura, a mensalidade proporcional ao período.
+Retorno sobre Tokens responde uma pergunta estreita: no intervalo analisado, quantas linhas efetivas foram parar no ramo de produção, quantos tokens o Claude Code gastou nesse intervalo e qual foi o custo — o equivalente de API, pela tabela publicada, e, se você tem assinatura, a mensalidade proporcional ao período.
 
 Duas razões saem daí: custo por linha efetiva, e linhas efetivas por milhão de tokens.
 
@@ -40,16 +40,16 @@ Copie a skill para a pasta de skills do Claude Code:
 
 ```bash
 mkdir -p ~/.claude/skills
-cp -R skills/return-on-tokens ~/.claude/skills/return-on-tokens
+cp -R skills/retorno-sobre-tokens ~/.claude/skills/retorno-sobre-tokens
 ```
 
 Um link simbólico também serve, se você for editar o config neste repositório:
 
 ```bash
-ln -s "$(pwd)/skills/return-on-tokens" ~/.claude/skills/return-on-tokens
+ln -s "$(pwd)/skills/retorno-sobre-tokens" ~/.claude/skills/retorno-sobre-tokens
 ```
 
-Preços, mensalidades, câmbio, ramo de produção e listas de exclusão ficam em `skills/return-on-tokens/scripts/rot_config.json`. Vale a pena abrir esse arquivo uma vez e ajustar o que for diferente da sua fatura.
+Preços, mensalidades, câmbio, ramo de produção e listas de exclusão ficam em `skills/retorno-sobre-tokens/scripts/rot_config.json`. Vale a pena abrir esse arquivo uma vez e ajustar o que for diferente da sua fatura.
 
 ## Como usar
 
@@ -58,7 +58,7 @@ Na conversa do Claude Code, peça o ROT. A skill pergunta o período e o plano a
 No terminal, a partir da pasta da skill, ou com o caminho completo do script:
 
 ```bash
-python3 ~/.claude/skills/return-on-tokens/scripts/rot_report.py
+python3 ~/.claude/skills/retorno-sobre-tokens/scripts/rot_report.py
 ```
 
 Num terminal interativo ele pergunta:
@@ -88,7 +88,7 @@ python3 tests/test_rot.py
 
 ## Metodologia e limitações
 
-O texto completo, com a tabela de preços e a fórmula, está em `skills/return-on-tokens/references/metodologia.md`. O resumo:
+O texto completo, com a tabela de preços e a fórmula, está em `skills/retorno-sobre-tokens/references/metodologia.md`. O resumo:
 
 **Produção.** Diff do que entrou no ramo de produção. Merge: primeiro pai até o commit do merge. Squash: o próprio commit. Rebase sem `(#N)` só entra se o `gh` listar o PR e os commits estiverem neste clone.
 
@@ -110,11 +110,11 @@ O texto completo, com a tabela de preços e a fórmula, está em `skills/return-
 
 ## Exemplo de saída
 
-Fixture `sample-app`, 7 dias terminando em 23/10/2026 15:00 UTC, Claude Max 5x, câmbio 5,0383. O PR #1 reescreve código e traz lockfile, vendor, gerado e snapshot (esses ficam fora). O PR #2 é um squash de 5 linhas. Um commit direto no `main` não entra. A mesma saída está em `skills/return-on-tokens/examples/exemplo-relatorio.txt`.
+Fixture `sample-app`, 7 dias terminando em 23/10/2026 15:00 UTC, Claude Max 5x, câmbio 5,0383. O PR #1 reescreve código e traz lockfile, vendor, gerado e snapshot (esses ficam fora). O PR #2 é um squash de 5 linhas. Um commit direto no `main` não entra. A mesma saída está em `skills/retorno-sobre-tokens/examples/exemplo-relatorio.txt`.
 
 ```
 ========================================================================
-  ROT — Return on Tokens
+  ROT — Retorno sobre Tokens
   7 dias · 16/10/2026 15:00 UTC → 23/10/2026 15:00 UTC
   Plano: Claude Max 5x · US$ 100,00/mês
 ========================================================================

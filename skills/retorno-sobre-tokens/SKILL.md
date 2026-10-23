@@ -1,11 +1,11 @@
 ---
-name: return-on-tokens
-description: "Mede Return on Tokens (ROT): tokens consumidos, custo e linhas de código que chegaram à produção. Use quando pedirem ROT, custo por linha, custo dos tokens, linhas efetivas enviadas, ou se o uso do Claude valeu a pena no período. Pergunta o período (24 horas, 7 dias, 15 dias ou 30 dias) e o plano. Não estima salário, hora economizada nem ROI de negócio."
+name: retorno-sobre-tokens
+description: "Mede Retorno sobre Tokens (ROT): tokens consumidos, custo e linhas de código que chegaram à produção. Use quando pedirem ROT, custo por linha, custo dos tokens, linhas efetivas enviadas, ou se o uso do Claude valeu a pena no período. Pergunta o período (24 horas, 7 dias, 15 dias ou 30 dias) e o plano. Não estima salário, hora economizada nem ROI de negócio."
 user-invocable: true
 allowed-tools: Bash, Read
 ---
 
-# ROT — Return on Tokens
+# ROT — Retorno sobre Tokens
 
 Mede, no período pedido, quanto código chegou ao ramo de produção e quanto isso custou em tokens do Claude Code. O dólar é a moeda base. O real aparece por uma taxa editável.
 

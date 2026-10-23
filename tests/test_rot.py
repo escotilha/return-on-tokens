@@ -13,7 +13,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPTS = ROOT / "skills" / "return-on-tokens" / "scripts"
+SCRIPTS = ROOT / "skills" / "retorno-sobre-tokens" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 import rotlib  # noqa: E402
@@ -569,9 +569,9 @@ class CliTests(unittest.TestCase):
 class DocTests(unittest.TestCase):
     def test_readme_and_example_are_portuguese(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        example = (ROOT / "skills" / "return-on-tokens" / "examples" / "exemplo-relatorio.txt").read_text(encoding="utf-8")
+        example = (ROOT / "skills" / "retorno-sobre-tokens" / "examples" / "exemplo-relatorio.txt").read_text(encoding="utf-8")
         for heading in (
-            "O que é Return on Tokens (ROT)",
+            "O que é Retorno sobre Tokens (ROT)",
             "Como funciona",
             "Como instalar",
             "Como usar",

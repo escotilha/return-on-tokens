@@ -30,7 +30,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="rot_report.py",
         description=(
-            "ROT — Return on Tokens. Mede linhas que chegaram à produção, "
+            "ROT — Retorno sobre Tokens. Mede linhas que chegaram à produção, "
             "tokens dos logs locais do Claude Code e o custo no período."
         ),
         epilog=(

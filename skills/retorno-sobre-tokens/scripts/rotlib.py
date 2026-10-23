@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Núcleo do ROT — Return on Tokens.
+"""Núcleo do ROT — Retorno sobre Tokens.
 
 Mede, num período, as linhas que chegaram ao ramo de produção e os tokens
 dos logs locais do Claude Code. O dólar é a moeda base; o real é conversão
@@ -959,7 +959,7 @@ def render_text(report: dict) -> str:
     cost = report["cost"]
     ratios = report["ratios"]
     lines.append("=" * 72)
-    lines.append("  ROT — Return on Tokens")
+    lines.append("  ROT — Retorno sobre Tokens")
     lines.append(f"  {period['label']} · {format_dt(parse_ts(period['start']))} → {format_dt(parse_ts(period['end']))}")
     monthly = format_usd(plan["monthly_usd"]) + "/mês" if plan["kind"] == "subscription" else "paga por token"
     lines.append(f"  Plano: {plan['label']} · {monthly}")

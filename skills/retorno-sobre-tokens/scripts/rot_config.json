@@ -1,5 +1,5 @@
 {
-  "_comment": "Premissas editáveis do ROT (Return on Tokens). Todo número daqui é uma escolha sua: o relatório avisa a fonte e a data, e não busca cotação nem tabela de preço ao vivo.",
+  "_comment": "Premissas editáveis do ROT (Retorno sobre Tokens). Todo número daqui é uma escolha sua: o relatório avisa a fonte e a data, e não busca cotação nem tabela de preço ao vivo.",
 
   "pricing_source": "https://platform.claude.com/docs/en/about-claude/pricing",
   "pricing_checked": "2026-10-23",

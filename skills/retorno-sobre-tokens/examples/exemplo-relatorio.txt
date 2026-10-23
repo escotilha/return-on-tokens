@@ -3,7 +3,7 @@ Exemplo gerado pelo rot_report.py em cima de um repositório de fixture
 normalizada para ~/.claude/projects. Os SHAs curtos são os do fixture.
 
 ========================================================================
-  ROT — Return on Tokens
+  ROT — Retorno sobre Tokens
   7 dias · 16/10/2026 15:00 UTC → 23/10/2026 15:00 UTC
   Plano: Claude Max 5x · US$ 100,00/mês
 ========================================================================
