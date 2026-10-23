@@ -19,7 +19,7 @@
   "_production_branch_note": "Vazio detecta o ramo padrão (origin/HEAD, depois main, master, trunk). Preencha para forçar o ramo que você trata como produção.",
 
   "models": {
-    "_comment": "Prefixo do id que aparece no log. 'claude-sonnet-4-6-20260217' e 'claude-opus-4-6[1m]' casam com a chave mais longa. Os nomes abaixo são os da tabela publicada; não há apelido genérico para modelo desconhecido.",
+    "_comment": "O preço só vale para o nome exato do modelo que aparece no log. Duas exceções, ambas conservadoras: um apelido exato em model_aliases, e o sufixo de data de 8 dígitos (-AAAAMMDD), que é removido só quando a tabela tem o nome base ('claude-haiku-4-5-20251001' usa 'claude-haiku-4-5'). Não há casamento por prefixo: 'claude-opus-4-6[1m]' ou 'claude-sonnet-5-5-preview' ficam sem preço até você criar a linha ou o apelido. Modelo sem preço aparece à parte, com aviso, e fica fora do dólar.",
     "claude-fable-5-1": {"input": 10.0, "output": 50.0, "cache_write_5m": 12.5, "cache_write_1h": 20.0, "cache_read": 0.25},
     "claude-fable-5": {"input": 10.0, "output": 50.0, "cache_write_5m": 12.5, "cache_write_1h": 20.0, "cache_read": 1.0},
     "claude-mythos-5-1": {"input": 10.0, "output": 50.0, "cache_write_5m": 12.5, "cache_write_1h": 20.0, "cache_read": 0.25},
@@ -71,6 +71,25 @@
     "claude-haiku-4-5": {"input": 1.0, "output": 5.0, "cache_write_5m": 1.25, "cache_write_1h": 2.0, "cache_read": 0.10},
     "claude-haiku-3-5": {"input": 0.80, "output": 4.0, "cache_write_5m": 1.0, "cache_write_1h": 1.60, "cache_read": 0.08},
     "<synthetic>": {"input": 0.0, "output": 0.0, "cache_write_5m": 0.0, "cache_write_1h": 0.0, "cache_read": 0.0}
+  },
+
+  "model_aliases": {
+    "_comment": "Apelidos exatos: nome no log → nome na tabela acima. Sem curinga e sem prefixo. Exemplo: \"claude-opus-4-6[1m]\": \"claude-opus-4-6\", se você aceita cobrar o contexto de 1 milhão pelo preço normal. Vem vazio de propósito."
+  },
+
+  "autores": {
+    "_comment": "Quem é você na conta. Só PRs desses autores entram. logins = login do GitHub (comparado com o autor do PR que o gh informa); emails = e-mail de commit (usado quando não há gh). Vazio: usa `gh api user` e `git config user.email`. --autor na linha de comando tem prioridade.",
+    "logins": [],
+    "emails": []
+  },
+
+  "equipe": {
+    "_comment": "Modo equipe. repositorio_central: URL git (ex.: git@github.com:sua-org/rot-equipe.git) ou uma pasta local. devs: logins do GitHub de quem deve enviar em cada rodada. login: o seu login, se o gh não estiver instalado. pasta_cache: onde fica o clone (padrão ~/.cache/rot-equipe).",
+    "repositorio_central": "",
+    "ramo": "main",
+    "devs": [],
+    "login": "",
+    "pasta_cache": ""
   },
 
   "plans": {

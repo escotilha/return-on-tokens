@@ -1,7 +1,3 @@
-Exemplo gerado pelo rot_report.py em cima de um repositório de fixture
-(sample-app, 7 dias, Claude Max 5x, câmbio 5,0383). A pasta de logs foi
-normalizada para ~/.claude/projects. Os SHAs curtos são os do fixture.
-
 ========================================================================
   ROT — Retorno sobre Tokens
   7 dias · 16/10/2026 15:00 UTC → 23/10/2026 15:00 UTC
@@ -10,19 +6,22 @@ normalizada para ~/.claude/projects. Os SHAs curtos são os do fixture.
 
 TOKENS
   Logs em ~/.claude/projects
-  Entrada                              1.020.000
-  Saída                                  102.000
-  Gravação de cache (5 min)              200.000
-  Gravação de cache (1 h)                      0
-  Leitura de cache                     1.000.000
-  Total                                2.322.000
-  Sessões no período                           2
+  Tipo                              Tokens       Custo API  % do custo
+  Entrada                        1.020.500        US$ 3,06       62,3%
+  Saída                            103.000        US$ 1,54       31,4%
+  Gravação de cache (5 min)          1.000      US$ 0,0037        0,1%
+  Gravação de cache (1 h)            1.000      US$ 0,0060        0,1%
+  Leitura de cache               1.000.000      US$ 0,3000        6,1%
+  Total                          2.125.500        US$ 4,91
+  Sem preço (fora do custo)            500
+  Sessões no período                     4
+  Duplicatas descartadas: 3 registros repetidos e 1 arquivo idêntico.
 
 CÓDIGO EM PRODUÇÃO
   sample-app · ramo main · fonte: git
-    PR #1        80036a9  23 linhas efetivas  (+19 −13, saldo +6)
+    PR #1        79d3ef9  23 linhas efetivas  (+19 −13, saldo +6)
       Merge pull request #1 from dev/feature
-    PR #2        6770e46  5 linhas efetivas  (+5 −0, saldo +5)
+    PR #2        2eb6a16  5 linhas efetivas  (+5 −0, saldo +5)
       Adiciona healthcheck (#2)
 
   Linhas efetivas                             28
@@ -30,26 +29,31 @@ CÓDIGO EM PRODUÇÃO
   Remoções                                    13
   Saldo                                      +11
   Fora da conta (adições + remoções): 100 em lockfiles, 50 em código vendorizado, 62 em arquivos gerados, 20 em snapshots.
+  Autor considerado: dev@example.com (fonte: --autor).
+  PRs de outros autores fora da conta: 1 (6 linhas efetivas, 1 autor).
 
 CUSTO
-  Equivalente de API                        US$ 5,58
+  Equivalente de API                        US$ 4,91
   Assinatura proporcional                  US$ 23,00
     US$ 100,00 × 7/30,4375 dias
   Custo usado nos indicadores              US$ 23,00
     Caixa da assinatura neste período, não o preço de tabela da API.
   Em reais                                 R$ 115,87
     US$ 1 = R$ 5,0383. Câmbio editável em rot_config.json.
-    Equivalente de API em reais: R$ 28,11.
+    Equivalente de API em reais: R$ 24,76.
 
 INDICADORES
   Custo por linha efetiva                             US$ 0,8214
   O mesmo em reais                                    R$ 4,14
-  Equivalente de API por linha efetiva                US$ 0,1993
-  Linhas efetivas por milhão de tokens                12,06
-  Idem, só repositórios que publicaram                12,06
+  Equivalente de API por linha efetiva                US$ 0,1755
+  Linhas efetivas por milhão de tokens de SAÍDA       271,84
 
 POR REPOSITÓRIO
-  sample-app: 28 linhas efetivas, 2.322.000 tokens na pasta, API US$ 5,58
+  sample-app: 28 linhas efetivas, 2.125.000 tokens na pasta, API US$ 4,91
+
+AVISOS
+  ! 1 evento com tokens sem data confiável (fuso ausente ou inválido) foi ignorado.
+  !! ATENÇÃO: o modelo 'claude-inexistente' não tem preço em rot_config.json. 500 tokens SEM PREÇO ficaram fora do custo — o equivalente de API está subestimado. Acrescente o modelo à tabela, ou um apelido exato em model_aliases.
 
 RESSALVAS
   - Linha efetiva é, por arquivo de texto, o maior valor entre adições e remoções. Uma refatoração que troca 100 linhas por 100 conta 100 — não 200 e não zero. Arquivos diferentes não se cancelam.
@@ -57,7 +61,10 @@ RESSALVAS
   - Lockfile, código vendorizado, arquivo gerado e snapshot saem da conta pelo caminho. Um gerado com nome fora da lista entra. As listas estão em rot_config.json.
   - Os tokens vêm só dos JSONL locais do Claude Code nesta máquina. Conversa na web, outro aplicativo e log apagado não aparecem.
   - O custo da assinatura é a mensalidade proporcional ao período (mês de 30,4375 dias, que é 365,25/12). É um custo fixo rateado, não a causa das linhas: quanto mais código entra em produção, menor fica o custo por linha.
-  - O equivalente de API usa a tabela publicada e editável. Modelo sem linha não entra no dólar e aparece nos avisos. Gravação de cache sem o detalhe de 5 minutos ou 1 hora é cobrada como 5 minutos.
+  - O equivalente de API usa a tabela publicada e editável, e só casa o nome exato do modelo (ou um apelido exato em model_aliases, ou o nome sem sufixo de data -AAAAMMDD quando a tabela lista o nome base). Modelo sem linha fica sem preço: os tokens aparecem à parte e não entram no dólar. Gravação de cache sem o detalhe de 5 minutos ou 1 hora é cobrada como 5 minutos.
+  - O Claude Code grava a mesma resposta várias vezes (streaming, sessão retomada, sidechain). Cada resposta conta uma vez, pela dupla message.id + requestId, com o maior uso registrado.
+  - Só entram PRs de sua autoria: login do GitHub quando o gh informa o autor, senão o e-mail do primeiro commit do PR. PRs de colegas mesclados no mesmo ramo ficam fora e aparecem só como contagem.
+  - Linhas por milhão de tokens de saída é uma razão de volume, não de qualidade. Ela ignora entrada e cache, que dependem do tamanho do contexto e não do código produzido.
   - Atribuição de token a um PR é heurística (pasta da sessão, menção ao número, janela do PR). O total do período é a medida firme.
   - Isto não é ROI de negócio. Não estima salário, hora economizada, receita nem risco.
   - O real usa a taxa editável de 5,0383 reais por dólar (2026-10-22). Não é cotação ao vivo. O dólar continua sendo a moeda base.

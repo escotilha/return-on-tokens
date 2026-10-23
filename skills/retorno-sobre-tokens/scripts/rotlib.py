@@ -11,12 +11,14 @@ Não estima salário, hora economizada nem ROI de negócio.
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import json
 import os
 import re
 import subprocess
 from pathlib import Path
 
+TOOL_VERSION = "1.1.0"
 MONTH_DAYS_DEFAULT = 365.25 / 12.0
 PERIODS = {
     "24h": dt.timedelta(hours=24),
@@ -446,6 +448,7 @@ def pr_record(
         return None
     parent, tip = bounds
     loc = diff_loc(repo, parent, tip, cfg)
+    author_email = first_author_email(repo, parent, tip, sha)
     if kind is None:
         kind = "merge" if len(parents) >= 2 else "squash"
     window_start, window_end = work_window(repo, sha, parents, when)
@@ -461,8 +464,27 @@ def pr_record(
         "window_end": window_end.isoformat(),
         "kind": kind,
         "url": url,
+        "author_email": author_email,
+        "author_login": None,
         "loc": loc,
     }
+
+
+def first_author_email(repo: Path, parent: str, tip: str, sha: str) -> str | None:
+    """E-mail de autor do primeiro commit do PR (o mais antigo que não é merge).
+
+    No squash, o commit espremido leva o autor do PR. No merge e no rebase, o
+    primeiro commit da branch indica quem abriu o trabalho.
+    """
+    listed = _git(repo, "log", "--reverse", "--no-merges", "--format=%ae", f"{parent}..{tip}")
+    if listed.returncode == 0:
+        for line in listed.stdout.splitlines():
+            if line.strip():
+                return line.strip().lower()
+    own = _git(repo, "log", "-1", "--format=%ae", sha)
+    if own.returncode == 0 and own.stdout.strip():
+        return own.stdout.strip().lower()
+    return None
 
 
 def collect_git_prs(repo: Path, branch: str, start: dt.datetime, end: dt.datetime, cfg: dict) -> list[dict]:
@@ -492,7 +514,7 @@ def default_gh_items(repo: Path, branch: str, start: dt.datetime, end: dt.dateti
                 "--state", "merged",
                 "--base", branch,
                 "--limit", "200",
-                "--json", "number,title,mergedAt,mergeCommit,url",
+                "--json", "number,title,mergedAt,mergeCommit,url,author",
             ],
             cwd=str(repo),
             capture_output=True,
@@ -522,6 +544,7 @@ def default_gh_items(repo: Path, branch: str, start: dt.datetime, end: dt.dateti
             "sha": sha,
             "url": pr.get("url"),
             "commit_oids": oids,
+            "author_login": ((pr.get("author") or {}).get("login") or None),
         })
     return items
 
@@ -565,6 +588,8 @@ def merge_gh_items(
                 current["url"] = item["url"]
             if item.get("title"):
                 current["title"] = item["title"]
+            if item.get("author_login"):
+                current["author_login"] = item["author_login"]
             continue
         if not commit_exists(repo, sha):
             warnings.append(
@@ -594,40 +619,190 @@ def merge_gh_items(
             kind="github",
         )
         if record:
+            record["author_login"] = item.get("author_login")
             prs.append(record)
             by_sha[sha] = record
     return prs, warnings
 
 
-def lookup_rate(cfg: dict, model: str) -> dict | None:
+NOREPLY = re.compile(r"^(?:\d+\+)?(?P<login>[^@]+)@users\.noreply\.github\.com$")
+
+
+def gh_user_login() -> str | None:
+    """Login do GitHub CLI autenticado (`gh api user`). None se não houver."""
+    try:
+        result = subprocess.run(
+            ["gh", "api", "user", "--jq", ".login"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return None
+    login = result.stdout.strip()
+    if result.returncode != 0 or not login:
+        return None
+    return login
+
+
+def git_user_email(path: Path | None = None) -> str | None:
+    args = ["git"]
+    if path is not None:
+        args += ["-C", str(path)]
+    args += ["config", "user.email"]
+    try:
+        result = subprocess.run(args, capture_output=True, text=True, check=False)
+    except FileNotFoundError:
+        return None
+    email = result.stdout.strip().lower()
+    return email or None
+
+
+def resolve_identity(
+    cfg: dict,
+    cli_authors: list[str] | None,
+    use_gh: bool,
+    repos: list[Path],
+    login_fetcher=None,
+) -> dict:
+    """Quem é "você" na conta. Login do GitHub e/ou e-mail de commit.
+
+    Prioridade: --autor; senão a lista `autores` do config; o que faltar vem
+    do `gh api user` (login) e do `git config user.email` (e-mail).
+    """
+    logins: set[str] = set()
+    emails: set[str] = set()
+    sources: list[str] = []
+    for item in cli_authors or []:
+        value = item.strip().lower()
+        if not value:
+            continue
+        (emails if "@" in value else logins).add(value)
+    if logins or emails:
+        sources.append("--autor")
+        return {"logins": sorted(logins), "emails": sorted(emails), "sources": sources}
+    configured = cfg.get("autores") or {}
+    for value in configured.get("logins") or []:
+        if str(value).strip():
+            logins.add(str(value).strip().lower())
+    for value in configured.get("emails") or []:
+        if str(value).strip():
+            emails.add(str(value).strip().lower())
+    if logins or emails:
+        sources.append("rot_config.json")
+    if not logins and use_gh:
+        login = (login_fetcher or gh_user_login)()
+        if login:
+            logins.add(login.lower())
+            sources.append("gh api user")
+    if not emails:
+        for repo in repos:
+            email = git_user_email(repo)
+            if email:
+                emails.add(email)
+        if not emails:
+            email = git_user_email(None)
+            if email:
+                emails.add(email)
+        if emails:
+            sources.append("git config user.email")
+    return {"logins": sorted(logins), "emails": sorted(emails), "sources": sources}
+
+
+def pr_is_mine(pr: dict, identity: dict) -> bool:
+    """O PR é seu se o login do autor no GitHub casa; sem login, vale o e-mail.
+
+    Login conhecido e diferente do seu decide "não", mesmo que o e-mail case:
+    o GitHub sabe quem abriu o PR. E-mail noreply do GitHub
+    (123+login@users.noreply.github.com) conta como o login.
+    """
+    logins = set(identity.get("logins") or [])
+    emails = set(identity.get("emails") or [])
+    login = (pr.get("author_login") or "").lower()
+    if login and logins:
+        return login in logins
+    email = (pr.get("author_email") or "").lower()
+    if not email:
+        return False
+    if email in emails:
+        return True
+    match = NOREPLY.match(email)
+    return bool(match and match.group("login").lower() in logins)
+
+
+def pr_author_label(pr: dict) -> str:
+    return pr.get("author_login") or pr.get("author_email") or "desconhecido"
+
+
+
+DATE_SUFFIX = re.compile(r"^(?P<base>.+)-(?P<date>20\d{6})$")
+TOKEN_TYPES = ("input", "output", "cache_write_5m", "cache_write_1h", "cache_read")
+
+
+def model_aliases(cfg: dict) -> dict[str, str]:
+    """Apelidos explícitos do config: nome exato no log → nome exato na tabela."""
+    raw = cfg.get("model_aliases") or {}
+    return {
+        str(key): str(value)
+        for key, value in raw.items()
+        if not str(key).startswith("_") and isinstance(value, str)
+    }
+
+
+def resolve_model_name(cfg: dict, model: str) -> str | None:
+    """Casa o modelo com a tabela só por nome exato.
+
+    Ordem: nome exato; apelido exato em model_aliases; e, por último, o nome
+    sem um sufixo de data de 8 dígitos (-AAAAMMDD) quando a tabela lista o
+    nome base. Não há prefixo, parente mais próximo nem outro palpite: o que
+    não casar fica sem preço.
+    """
     models = public_dict(cfg.get("models", {}))
     if model in models:
-        return models[model]
-    matches = [key for key in models if model.startswith(key)]
-    if not matches:
+        return model
+    alias = model_aliases(cfg).get(model)
+    if alias is not None and alias in models:
+        return alias
+    match = DATE_SUFFIX.match(model)
+    if match and match.group("base") in models:
+        return match.group("base")
+    return None
+
+
+def lookup_rate(cfg: dict, model: str) -> dict | None:
+    name = resolve_model_name(cfg, model)
+    if name is None:
         return None
-    return models[max(matches, key=len)]
+    return public_dict(cfg.get("models", {}))[name]
 
 
-def price_turn(cfg: dict, model: str, incoming: int, outgoing: int, cache_5m: int, cache_1h: int, cache_read: int) -> tuple[float, str | None]:
+def price_breakdown(cfg: dict, model: str, incoming: int, outgoing: int, cache_5m: int, cache_1h: int, cache_read: int) -> dict | None:
+    """Custo em dólares por tipo de token. None quando o modelo não tem preço."""
     rate = lookup_rate(cfg, model)
     if rate is None:
-        return 0.0, model
+        return None
     prompt = incoming + cache_5m + cache_1h + cache_read
     over = rate.get("when_prompt_over_100k_tokens")
     if isinstance(over, dict) and prompt > 100_000:
         rate = over
     try:
-        usd = (
-            incoming * float(rate["input"])
-            + outgoing * float(rate["output"])
-            + cache_5m * float(rate["cache_write_5m"])
-            + cache_1h * float(rate["cache_write_1h"])
-            + cache_read * float(rate["cache_read"])
-        ) / 1_000_000.0
+        return {
+            "input": incoming * float(rate["input"]) / 1_000_000.0,
+            "output": outgoing * float(rate["output"]) / 1_000_000.0,
+            "cache_write_5m": cache_5m * float(rate["cache_write_5m"]) / 1_000_000.0,
+            "cache_write_1h": cache_1h * float(rate["cache_write_1h"]) / 1_000_000.0,
+            "cache_read": cache_read * float(rate["cache_read"]) / 1_000_000.0,
+        }
     except (KeyError, TypeError, ValueError):
+        return None
+
+
+def price_turn(cfg: dict, model: str, incoming: int, outgoing: int, cache_5m: int, cache_1h: int, cache_read: int) -> tuple[float, str | None]:
+    parts = price_breakdown(cfg, model, incoming, outgoing, cache_5m, cache_1h, cache_read)
+    if parts is None:
         return 0.0, model
-    return usd, None
+    return sum(parts.values()), None
 
 
 def empty_tokens() -> dict:
@@ -638,6 +813,8 @@ def empty_tokens() -> dict:
         "cache_write_1h": 0,
         "cache_read": 0,
         "api_cost_usd": 0.0,
+        "cost_by_type_usd": {key: 0.0 for key in TOKEN_TYPES},
+        "unpriced_by_type": {key: 0 for key in TOKEN_TYPES},
         "by_model_tokens": {},
         "by_model_cost_usd": {},
         "unpriced_tokens": {},
@@ -655,6 +832,9 @@ def add_tokens(total: dict, part: dict, scale: float = 1.0) -> None:
     for key in ("input", "output", "cache_write_5m", "cache_write_1h", "cache_read"):
         total[key] += part[key] * scale
     total["api_cost_usd"] += part["api_cost_usd"] * scale
+    for key in TOKEN_TYPES:
+        total["cost_by_type_usd"][key] += part["cost_by_type_usd"][key] * scale
+        total["unpriced_by_type"][key] += part["unpriced_by_type"][key] * scale
     for model, amount in part["by_model_tokens"].items():
         total["by_model_tokens"][model] = total["by_model_tokens"].get(model, 0) + amount * scale
     for model, amount in part["by_model_cost_usd"].items():
@@ -701,48 +881,100 @@ def text_of_user(record: dict) -> str:
     return ""
 
 
-def apply_usage(bucket: dict, cfg: dict, model: str, usage: dict) -> None:
-    incoming = int(usage.get("input_tokens") or 0)
-    outgoing = int(usage.get("output_tokens") or 0)
-    cache_read = int(usage.get("cache_read_input_tokens") or 0)
+def usage_numbers(usage: dict) -> dict:
     cache_5m, cache_1h = cache_split(usage)
-    usd, unpriced = price_turn(cfg, model, incoming, outgoing, cache_5m, cache_1h, cache_read)
-    mass = incoming + outgoing + cache_5m + cache_1h + cache_read
-    bucket["input"] += incoming
-    bucket["output"] += outgoing
-    bucket["cache_write_5m"] += cache_5m
-    bucket["cache_write_1h"] += cache_1h
-    bucket["cache_read"] += cache_read
-    bucket["api_cost_usd"] += usd
+    return {
+        "input": int(usage.get("input_tokens") or 0),
+        "output": int(usage.get("output_tokens") or 0),
+        "cache_write_5m": cache_5m,
+        "cache_write_1h": cache_1h,
+        "cache_read": int(usage.get("cache_read_input_tokens") or 0),
+    }
+
+
+def apply_numbers(bucket: dict, cfg: dict, model: str, numbers: dict) -> None:
+    parts = price_breakdown(
+        cfg, model,
+        numbers["input"], numbers["output"], numbers["cache_write_5m"],
+        numbers["cache_write_1h"], numbers["cache_read"],
+    )
+    mass = sum(numbers[key] for key in TOKEN_TYPES)
+    for key in TOKEN_TYPES:
+        bucket[key] += numbers[key]
     bucket["by_model_tokens"][model] = bucket["by_model_tokens"].get(model, 0) + mass
+    if parts is None:
+        bucket["by_model_cost_usd"][model] = bucket["by_model_cost_usd"].get(model, 0.0)
+        if mass:
+            bucket["unpriced_tokens"][model] = bucket["unpriced_tokens"].get(model, 0) + mass
+            for key in TOKEN_TYPES:
+                bucket["unpriced_by_type"][key] += numbers[key]
+        return
+    usd = sum(parts.values())
+    for key in TOKEN_TYPES:
+        bucket["cost_by_type_usd"][key] += parts[key]
+    bucket["api_cost_usd"] += usd
     bucket["by_model_cost_usd"][model] = bucket["by_model_cost_usd"].get(model, 0.0) + usd
-    if unpriced and mass:
-        bucket["unpriced_tokens"][unpriced] = bucket["unpriced_tokens"].get(unpriced, 0) + mass
 
 
-def scan_projects(projects_dir: Path, cfg: dict, start: dt.datetime, end: dt.datetime) -> tuple[list[dict], list[str], int]:
+def apply_usage(bucket: dict, cfg: dict, model: str, usage: dict) -> None:
+    apply_numbers(bucket, cfg, model, usage_numbers(usage))
+
+
+def usage_key(record: dict) -> tuple | None:
+    """Identidade de uma resposta do assistente no log.
+
+    O Claude Code grava a mesma resposta várias vezes: um registro por bloco
+    de conteúdo durante o streaming, cópias quando a sessão é retomada e
+    cópias em sidechains. Todas trazem o mesmo message.id e o mesmo
+    requestId. Sem nenhum dos dois, o uuid do registro serve de chave; sem
+    nada, o registro conta sozinho.
+    """
+    message = record.get("message")
+    message_id = message.get("id") if isinstance(message, dict) else None
+    request_id = record.get("requestId")
+    if message_id or request_id:
+        return ("msg", str(message_id or ""), str(request_id or ""))
+    if record.get("uuid"):
+        return ("uuid", str(record["uuid"]))
+    return None
+
+
+def merge_numbers(current: dict, new: dict) -> dict:
+    """Fica o maior valor de cada campo: o registro final do streaming é o completo."""
+    return {key: max(current[key], new[key]) for key in TOKEN_TYPES}
+
+
+def scan_projects(projects_dir: Path, cfg: dict, start: dt.datetime, end: dt.datetime) -> tuple[list[dict], list[str], dict]:
+    """Lê os JSONL e devolve sessões, avisos e a contagem de deduplicação."""
     warnings: list[str] = []
+    stats = {"records": 0, "unique": 0, "duplicates": 0, "duplicate_files": 0, "untimed": 0}
     if not projects_dir.is_dir():
         warnings.append(f"Não encontrei logs do Claude Code em {projects_dir}.")
-        return [], warnings, 0
-    sessions = []
-    untimed = 0
-    root_cache: dict[str, Path | None] = {}
+        return [], warnings, stats
+    files: list[dict] = []
+    seen_hashes: set[str] = set()
+    # chave → {"file": índice, "moment", "model", "numbers"}
+    unique: dict[tuple, dict] = {}
+    loose: list[dict] = []
+    untimed_keys: set[tuple] = set()
+    untimed_loose = 0
     for path in sorted(projects_dir.rglob("*.jsonl")):
         if not path.is_file():
             continue
-        bucket = empty_tokens()
-        mentions: set[int] = set()
-        cwd = None
-        session_id = None
-        moments: list[dt.datetime] = []
-        counted = False
         try:
-            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+            raw = path.read_bytes()
         except OSError as exc:
             warnings.append(f"Não consegui ler {path.name}: {exc}")
             continue
-        for line in lines:
+        digest = hashlib.sha256(raw).hexdigest()
+        if digest in seen_hashes:
+            stats["duplicate_files"] += 1
+            continue
+        seen_hashes.add(digest)
+        info = {"path": path, "cwd": None, "session_id": None, "mentions": set()}
+        index = len(files)
+        files.append(info)
+        for line in raw.decode("utf-8", errors="replace").splitlines():
             if not line.strip():
                 continue
             try:
@@ -752,36 +984,63 @@ def scan_projects(projects_dir: Path, cfg: dict, start: dt.datetime, end: dt.dat
             if not isinstance(record, dict):
                 continue
             if record.get("cwd"):
-                cwd = str(record["cwd"])
+                info["cwd"] = str(record["cwd"])
             if record.get("sessionId"):
-                session_id = str(record["sessionId"])
+                info["session_id"] = str(record["sessionId"])
             moment = parse_ts(record.get("timestamp"))
             found = usage_from_record(record)
-            if found and moment is None:
-                untimed += 1
-                continue
-            if moment is None or moment < start or moment >= end:
-                continue
-            if record.get("type") == "user":
-                for number in PR_MENTION.findall(text_of_user(record)):
-                    mentions.add(int(number))
             if not found:
+                if record.get("type") == "user" and moment is not None and start <= moment < end:
+                    for number in PR_MENTION.findall(text_of_user(record)):
+                        info["mentions"].add(int(number))
                 continue
-            apply_usage(bucket, cfg, found["model"], found["usage"])
-            moments.append(moment)
-            counted = True
-        if not counted:
+            stats["records"] += 1
+            key = usage_key(record)
+            numbers = usage_numbers(found["usage"])
+            if key is None:
+                if moment is None:
+                    untimed_loose += 1
+                    continue
+                loose.append({"file": index, "moment": moment, "model": found["model"], "numbers": numbers})
+                continue
+            entry = unique.get(key)
+            if entry is None:
+                unique[key] = {"file": index, "moment": moment, "model": found["model"], "numbers": numbers}
+                continue
+            stats["duplicates"] += 1
+            entry["numbers"] = merge_numbers(entry["numbers"], numbers)
+            if entry["model"] == "desconhecido" and found["model"] != "desconhecido":
+                entry["model"] = found["model"]
+            if moment is not None and (entry["moment"] is None or moment < entry["moment"]):
+                entry["moment"] = moment
+    stats["unique"] = len(unique) + len(loose)
+    per_file: dict[int, dict] = {}
+    for key, entry in list(unique.items()) + [(None, item) for item in loose]:
+        moment = entry["moment"]
+        if moment is None:
+            untimed_keys.add(key)
             continue
-        root = find_git_root(cwd, root_cache)
+        if moment < start or moment >= end:
+            continue
+        slot = per_file.setdefault(entry["file"], {"bucket": empty_tokens(), "moments": []})
+        apply_numbers(slot["bucket"], cfg, entry["model"], entry["numbers"])
+        slot["moments"].append(moment)
+    untimed = len(untimed_keys) + untimed_loose
+    sessions = []
+    root_cache: dict[str, Path | None] = {}
+    for index in sorted(per_file):
+        info = files[index]
+        slot = per_file[index]
+        root = find_git_root(info["cwd"], root_cache)
         sessions.append({
-            "path": str(path),
-            "session_id": session_id or path.stem,
-            "cwd": cwd,
+            "path": str(info["path"]),
+            "session_id": info["session_id"] or info["path"].stem,
+            "cwd": info["cwd"],
             "git_root": str(root) if root else None,
-            "start": min(moments).isoformat(),
-            "end": max(moments).isoformat(),
-            "mentions": sorted(mentions),
-            "tokens": bucket,
+            "start": min(slot["moments"]).isoformat(),
+            "end": max(slot["moments"]).isoformat(),
+            "mentions": sorted(info["mentions"]),
+            "tokens": slot["bucket"],
         })
     if untimed == 1:
         warnings.append(
@@ -793,7 +1052,11 @@ def scan_projects(projects_dir: Path, cfg: dict, start: dt.datetime, end: dt.dat
         )
     if not sessions and not warnings:
         warnings.append(f"Nenhum token do Claude Code caiu neste período em {projects_dir}.")
-    return sessions, warnings, untimed
+    stats["untimed"] = untimed
+    return sessions, warnings, stats
+
+
+SESSION_LOOKBACK = dt.timedelta(days=2)
 
 
 def overlaps(start_a: dt.datetime, end_a: dt.datetime, start_b: dt.datetime, end_b: dt.datetime) -> bool:
@@ -855,6 +1118,12 @@ def round_token_bucket(bucket: dict) -> dict:
         "cache_read": int(round(bucket["cache_read"])),
         "total": int(round(token_total(bucket))),
         "api_cost_usd": bucket["api_cost_usd"],
+        "cost_by_type_usd": {key: bucket["cost_by_type_usd"][key] for key in TOKEN_TYPES},
+        "unpriced_by_type": {key: int(round(bucket["unpriced_by_type"][key])) for key in TOKEN_TYPES},
+        "unpriced_total": int(round(sum(bucket["unpriced_by_type"].values()))),
+        "by_model_tokens": {
+            key: int(round(value)) for key, value in sorted(bucket["by_model_tokens"].items(), key=lambda item: -item[1])
+        },
         "by_model_cost_usd": {
             key: value for key, value in sorted(bucket["by_model_cost_usd"].items(), key=lambda item: -item[1])
         },
@@ -906,7 +1175,10 @@ def build_caveats(report: dict) -> list[str]:
         "Lockfile, código vendorizado, arquivo gerado e snapshot saem da conta pelo caminho. Um gerado com nome fora da lista entra. As listas estão em rot_config.json.",
         "Os tokens vêm só dos JSONL locais do Claude Code nesta máquina. Conversa na web, outro aplicativo e log apagado não aparecem.",
         "O custo da assinatura é a mensalidade proporcional ao período (mês de 30,4375 dias, que é 365,25/12). É um custo fixo rateado, não a causa das linhas: quanto mais código entra em produção, menor fica o custo por linha.",
-        "O equivalente de API usa a tabela publicada e editável. Modelo sem linha não entra no dólar e aparece nos avisos. Gravação de cache sem o detalhe de 5 minutos ou 1 hora é cobrada como 5 minutos.",
+        "O equivalente de API usa a tabela publicada e editável, e só casa o nome exato do modelo (ou um apelido exato em model_aliases, ou o nome sem sufixo de data -AAAAMMDD quando a tabela lista o nome base). Modelo sem linha fica sem preço: os tokens aparecem à parte e não entram no dólar. Gravação de cache sem o detalhe de 5 minutos ou 1 hora é cobrada como 5 minutos.",
+        "O Claude Code grava a mesma resposta várias vezes (streaming, sessão retomada, sidechain). Cada resposta conta uma vez, pela dupla message.id + requestId, com o maior uso registrado.",
+        "Só entram PRs de sua autoria: login do GitHub quando o gh informa o autor, senão o e-mail do primeiro commit do PR. PRs de colegas mesclados no mesmo ramo ficam fora e aparecem só como contagem.",
+        "Linhas por milhão de tokens de saída é uma razão de volume, não de qualidade. Ela ignora entrada e cache, que dependem do tamanho do contexto e não do código produzido.",
         "Atribuição de token a um PR é heurística (pasta da sessão, menção ao número, janela do PR). O total do período é a medida firme.",
         "Isto não é ROI de negócio. Não estima salário, hora economizada, receita nem risco.",
     ]
@@ -927,10 +1199,20 @@ def unpriced_warnings(bucket: dict) -> list[str]:
     warnings = []
     for model, amount in bucket["unpriced_tokens"].items():
         warnings.append(
-            f"O modelo '{model}' não tem preço em rot_config.json — "
-            f"{format_int(amount)} tokens ficaram fora do custo em dólares. Acrescente uma linha na tabela para precificá-los."
+            f"!! ATENÇÃO: o modelo '{model}' não tem preço em rot_config.json. "
+            f"{format_int(amount)} tokens SEM PREÇO ficaram fora do custo — o equivalente de API está subestimado. "
+            "Acrescente o modelo à tabela, ou um apelido exato em model_aliases."
         )
     return warnings
+
+
+TOKEN_LABELS = (
+    ("input", "Entrada"),
+    ("output", "Saída"),
+    ("cache_write_5m", "Gravação de cache (5 min)"),
+    ("cache_write_1h", "Gravação de cache (1 h)"),
+    ("cache_read", "Leitura de cache"),
+)
 
 
 def excluded_phrase(loc: dict) -> str:
@@ -950,6 +1232,10 @@ def excluded_phrase(loc: dict) -> str:
     return ", ".join(parts)
 
 
+def plural(count: int, one: str, many: str) -> str:
+    return f"{format_int(count)} {one if count == 1 else many}"
+
+
 def render_text(report: dict) -> str:
     lines: list[str] = []
     period = report["period"]
@@ -967,17 +1253,24 @@ def render_text(report: dict) -> str:
     lines.append("")
     lines.append("TOKENS")
     lines.append(f"  Logs em {report['projects_dir']}")
-    rows = [
-        ("Entrada", tokens["input"]),
-        ("Saída", tokens["output"]),
-        ("Gravação de cache (5 min)", tokens["cache_write_5m"]),
-        ("Gravação de cache (1 h)", tokens["cache_write_1h"]),
-        ("Leitura de cache", tokens["cache_read"]),
-        ("Total", tokens["total"]),
-    ]
-    for label, amount in rows:
-        lines.append(f"  {label:<32}{format_int(amount):>14}")
-    lines.append(f"  {'Sessões no período':<32}{format_int(report['sessions']):>14}")
+    lines.append(f"  {'Tipo':<26}{'Tokens':>14}{'Custo API':>16}{'% do custo':>12}")
+    api_total = tokens["api_cost_usd"]
+    for key, label in TOKEN_LABELS:
+        share = tokens["cost_by_type_usd"][key] / api_total * 100 if api_total else 0.0
+        lines.append(
+            f"  {label:<26}{format_int(tokens[key]):>14}"
+            f"{format_usd(tokens['cost_by_type_usd'][key]):>16}{format_number(share, 1) + '%':>12}"
+        )
+    lines.append(f"  {'Total':<26}{format_int(tokens['total']):>14}{format_usd(api_total):>16}")
+    if tokens["unpriced_total"]:
+        lines.append(f"  {'Sem preço (fora do custo)':<26}{format_int(tokens['unpriced_total']):>14}")
+    lines.append(f"  {'Sessões no período':<26}{format_int(report['sessions']):>14}")
+    dedup = report.get("dedup") or {}
+    if dedup.get("duplicates") or dedup.get("duplicate_files"):
+        lines.append(
+            f"  Duplicatas descartadas: {plural(dedup.get('duplicates', 0), 'registro repetido', 'registros repetidos')}"
+            f" e {plural(dedup.get('duplicate_files', 0), 'arquivo idêntico', 'arquivos idênticos')}."
+        )
     lines.append("")
     lines.append("CÓDIGO EM PRODUÇÃO")
     if not report["pull_requests"]:
@@ -1006,6 +1299,22 @@ def render_text(report: dict) -> str:
     lines.append(f"  Fora da conta (adições + remoções): {excluded_phrase(loc)}.")
     if loc["binary_files"]:
         lines.append(f"  Binários ignorados: {format_int(loc['binary_files'])}.")
+    identity = report.get("identity") or {}
+    who = ", ".join((identity.get("logins") or []) + (identity.get("emails") or [])) or "ninguém"
+    lines.append(f"  Autor considerado: {who} (fonte: {', '.join(identity.get('sources') or ['nenhuma'])}).")
+    others = report.get("other_authors") or {}
+    if others.get("pull_requests"):
+        lines.append(
+            f"  PRs de outros autores fora da conta: {format_int(others['pull_requests'])} "
+            f"({plural(others['effective'], 'linha efetiva', 'linhas efetivas')}, "
+            f"{plural(len(others['authors']), 'autor', 'autores')})."
+        )
+    without = report.get("without_session")
+    if without and without.get("pull_requests"):
+        lines.append(
+            f"  PRs sem sessão do Claude Code no repositório: {format_int(without['pull_requests'])} "
+            f"({format_int(without['effective'])} linhas efetivas) ficaram fora."
+        )
     lines.append("")
     lines.append("CUSTO")
     lines.append(f"  {'Equivalente de API':<32}{format_usd(cost['api_equivalent_usd']):>18}")
@@ -1033,10 +1342,9 @@ def render_text(report: dict) -> str:
     if cost["usd_brl_rate"]:
         lines.append(f"  {'O mesmo em reais':<52}{_fmt_optional_brl(ratios['brl_per_effective_loc'])}")
     lines.append(f"  {'Equivalente de API por linha efetiva':<52}{_fmt_optional_usd(ratios['api_usd_per_effective_loc'])}")
-    lines.append(f"  {'Linhas efetivas por milhão de tokens':<52}{_fmt_optional_number(ratios['effective_loc_per_million_tokens'])}")
     lines.append(
-        f"  {'Idem, só repositórios que publicaram':<52}"
-        f"{_fmt_optional_number(ratios['effective_loc_per_million_shipping_tokens'])}"
+        f"  {'Linhas efetivas por milhão de tokens de SAÍDA':<52}"
+        f"{_fmt_optional_number(ratios['effective_loc_per_million_output_tokens'])}"
     )
     if report["by_repo"]:
         lines.append("")
@@ -1051,7 +1359,7 @@ def render_text(report: dict) -> str:
         lines.append("")
         lines.append("AVISOS")
         for warning in report["warnings"]:
-            lines.append(f"  ! {warning}")
+            lines.append(f"  {warning}" if warning.startswith("!") else f"  ! {warning}")
     lines.append("")
     lines.append("RESSALVAS")
     for caveat in report["caveats"]:
@@ -1109,9 +1417,13 @@ def analyze(
     branch: str | None = None,
     exchange_rate: float | None = None,
     include_cwd: bool = False,
+    authors: list[str] | None = None,
+    identity: dict | None = None,
+    login_fetcher=None,
+    require_session: bool = False,
 ) -> dict:
     start, end = period_bounds(period_id, now)
-    sessions, warnings, _untimed = scan_projects(projects_dir, config, start, end)
+    sessions, warnings, dedup_stats = scan_projects(projects_dir, config, start, end)
     repo_inputs = list(repos)
     if include_cwd:
         repo_inputs.append(Path.cwd())
@@ -1123,6 +1435,16 @@ def analyze(
         if find_git_root(str(path), root_cache) is None:
             warnings.append(f"{path} não é um repositório git.")
     resolved = _repo_list(repo_inputs)
+    if identity is None:
+        identity = resolve_identity(config, authors, use_gh, resolved, login_fetcher)
+    if not identity["logins"] and not identity["emails"]:
+        warnings.append(
+            "!! Não sei quem é você: sem --autor, sem `autores` no config, sem `gh api user` e sem "
+            "`git config user.email`. Nenhum PR foi contado. Rode de novo com --autor SEU_LOGIN."
+        )
+    other_authors = {"pull_requests": 0, "effective": 0, "additions": 0, "deletions": 0, "authors": []}
+    without_session = {"pull_requests": 0, "effective": 0}
+    other_labels: set[str] = set()
     configured_branch = (config.get("production_branch") or "").strip() or None
     month_days = float(config.get("month_days") or MONTH_DAYS_DEFAULT)
     pull_requests: list[dict] = []
@@ -1157,7 +1479,17 @@ def analyze(
                 warnings.extend(gh_warnings)
                 source = "git+github"
         prs.sort(key=lambda item: item["committed_at"])
-        pull_requests.extend(prs)
+        mine = []
+        for pr in prs:
+            if pr_is_mine(pr, identity):
+                mine.append(pr)
+                continue
+            other_authors["pull_requests"] += 1
+            other_authors["effective"] += pr["loc"]["effective"]
+            other_authors["additions"] += pr["loc"]["additions"]
+            other_authors["deletions"] += pr["loc"]["deletions"]
+            other_labels.add(pr_author_label(pr))
+        pull_requests.extend(mine)
         repo_rows.append({
             "name": repo.name,
             "path": str(repo),
@@ -1165,6 +1497,25 @@ def analyze(
             "source": source,
         })
 
+    if require_session:
+        # Um PR squash tem janela de um instante só (o commit no ramo). O
+        # trabalho vem antes, então a janela ganha SESSION_LOOKBACK para trás.
+        kept = []
+        for pr in pull_requests:
+            window_start = parse_ts(pr["window_start"]) - SESSION_LOOKBACK
+            window_end = parse_ts(pr["window_end"])
+            touched = any(
+                session.get("git_root") == pr["repo_path"]
+                and overlaps(parse_ts(session["start"]), parse_ts(session["end"]), window_start, window_end)
+                for session in sessions
+            )
+            if touched:
+                kept.append(pr)
+            else:
+                without_session["pull_requests"] += 1
+                without_session["effective"] += pr["loc"]["effective"]
+        pull_requests = kept
+    other_authors["authors"] = sorted(other_labels)
     attribute_sessions(sessions, pull_requests)
     period_tokens = sum_sessions(sessions)
     loc = empty_loc()
@@ -1234,11 +1585,14 @@ def analyze(
             "usd_per_effective_loc": ratio(primary, effective),
             "brl_per_effective_loc": ratio(money_brl(primary) or 0.0, effective) if rate and effective else None,
             "api_usd_per_effective_loc": ratio(api_usd, effective),
-            "effective_loc_per_million_tokens": ratio(effective, token_view["total"] / 1_000_000) if token_view["total"] else None,
-            "effective_loc_per_million_shipping_tokens": (
-                ratio(effective, shipping_view["total"] / 1_000_000) if shipping_view["total"] else None
+            "effective_loc_per_million_output_tokens": (
+                ratio(effective, token_view["output"] / 1_000_000) if token_view["output"] else None
             ),
         },
+        "identity": identity,
+        "other_authors": other_authors,
+        "without_session": without_session if require_session else None,
+        "dedup": dedup_stats,
         "by_repo": [],
         "warnings": [],
         "caveats": [],
