@@ -35,6 +35,8 @@ Não entram commits diretos no ramo nem trabalho que ficou numa branch sem merge
 
 Com o GitHub CLI (`gh`) autenticado, a lista de PRs mesclados completa o git. Isso recupera rebases sem `(#N)` no assunto. Se o `gh` não responder, o relatório avisa e segue só com o git.
 
+Várias pastas do mesmo repositório contam uma vez. Uma worktree ligada (um checkout extra do mesmo `.git`) é tratada como o checkout principal, para o mesmo PR não entrar uma vez por pasta.
+
 ## Só os PRs de quem está medindo
 
 Antes de somar linhas, o ROT decide quem é "você". A primeira fonte que responder ganha:
@@ -178,7 +180,9 @@ mensalidade em USD × (dias do período / 30,4375)
 | Claude Max 5x | US$ 100 | <https://support.claude.com/en/articles/11049741-what-is-the-max-plan> |
 | Claude Max 20x | US$ 200 | a mesma página |
 
-Na assinatura, o indicador "custo por linha efetiva" usa o caixa proporcional, e o equivalente de API aparece ao lado. Na API sob demanda, o indicador usa o equivalente de API.
+Na assinatura, o indicador "custo por linha efetiva" usa o caixa proporcional. O relatório também diz, em frase própria, quanto os mesmos tokens custariam se fossem cobrados pela API ao preço de lista. Na API sob demanda, os dois números são o mesmo.
+
+No modo equipe, o total traz essa frase para o grupo, e a tabela por dev tem duas colunas: `plano` (a mensalidade rateada) e `se API` (o preço de lista daquela pessoa). A linha "API por linha efetiva" divide o preço de lista da equipe pelas linhas efetivas dos PRs únicos.
 
 O real é `dólar × usd_brl`. A taxa do config é a PTAX venda do Banco Central de 22/10/2026: 5,0383. Não há consulta ao vivo. `null`, `0` ou `--exchange-rate 0` desligam o real.
 

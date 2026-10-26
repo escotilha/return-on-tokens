@@ -432,6 +432,26 @@ class EndToEndTests(unittest.TestCase):
             **{"authors": ["dev@example.com"], **kwargs},
         )
 
+    def test_linked_worktree_counts_the_repo_once(self):
+        worktree = self.root / "sample-app-wt"
+        git(self.repo, "worktree", "add", "--detach", str(worktree), "HEAD")
+        self.assertEqual(rotlib.find_git_root(str(worktree), {}), self.repo.resolve())
+        spec = rotlib.plan_spec(self.cfg, "max-5x", None, None)
+        report = rotlib.analyze(
+            now=NOW,
+            period_id="7d",
+            plan=spec,
+            repos=[self.repo, worktree],
+            projects_dir=self.projects,
+            config=self.cfg,
+            use_gh=False,
+            include_cwd=False,
+            authors=["dev@example.com"],
+        )
+        self.assertEqual(report["loc"]["effective"], 28)
+        self.assertEqual(len(report["repos"]), 1)
+        self.assertEqual(report["repos"][0]["path"], str(self.repo.resolve()))
+
     def test_seven_days_counts_merged_work_only(self):
         report = self.analyze("7d")
         self.assertEqual(report["loc"]["effective"], 28)
@@ -493,6 +513,7 @@ class EndToEndTests(unittest.TestCase):
         self.assertTrue(any("claude-inexistente" in warning and "SEM PREÇO" in warning for warning in report["warnings"]))
         self.assertIn("Sem preço (fora do custo)", text)
         self.assertIn("Linhas efetivas por milhão de tokens de SAÍDA", text)
+        self.assertIn("Se estes tokens fossem cobrados pela API", text)
         self.assertNotIn("Idem, só repositórios", text)
         self.assertIn("% do custo", text)
 
@@ -861,6 +882,9 @@ class TeamTests(unittest.TestCase):
         self.assertLess(text.index("TOTAL DA EQUIPE"), text.index("POR DESENVOLVEDOR"))
         self.assertIn("dev-c", text.split("POR DESENVOLVEDOR")[1])
         self.assertIn("não enviou", text)
+        self.assertIn("Se estas pessoas pagassem a API", text)
+        self.assertIn("se API", text)
+        self.assertIn(rotlib.format_usd(summary["total"]["api_equivalent_usd"]), text)
         link = rot_equipe.publish_summary(cto, "2026-10-23_7d", text)
         self.assertIn("resumo.md", link)
         self.assertIn("TOTAL DA EQUIPE", self.remote_file("2026-10-23_7d/resumo.md"))

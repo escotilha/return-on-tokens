@@ -639,9 +639,21 @@ def render_team(summary: dict, usd_brl: float = 0.0) -> str:
     if total["tokens"]["unpriced_total"]:
         lines.append(f"  {'!! Tokens sem preço (fora do custo)':<40}{rotlib.format_int(total['tokens']['unpriced_total']):>16}")
     lines.append(f"  {'Equivalente de API':<40}{rotlib.format_usd(total['api_equivalent_usd']):>16}")
+    api_sentence = (
+        "  Se estas pessoas pagassem a API (preço de lista) em vez do plano, o período custaria "
+        f"{rotlib.format_usd(total['api_equivalent_usd'])}"
+    )
+    if usd_brl:
+        api_sentence += f" ({rotlib.format_brl(total['api_equivalent_usd'] * usd_brl)})"
+    lines.append(api_sentence + ".")
+    api_per_line = rotlib.ratio(total["api_equivalent_usd"], total["effective"])
+    lines.append(
+        f"  {'API por linha efetiva':<40}"
+        f"{(rotlib.format_usd(api_per_line) if api_per_line is not None else 'não se aplica'):>16}"
+    )
     lines.append(f"  {'Custo (planos de cada dev)':<40}{rotlib.format_usd(total['primary_usd']):>16}")
     if usd_brl:
-        lines.append(f"  {'Em reais':<40}{rotlib.format_brl(total['primary_usd'] * usd_brl):>16}")
+        lines.append(f"  {'Em reais (planos)':<40}{rotlib.format_brl(total['primary_usd'] * usd_brl):>16}")
     per_line = total["usd_per_effective_loc"]
     lines.append(f"  {'Custo por linha efetiva':<40}{(rotlib.format_usd(per_line) if per_line is not None else 'não se aplica'):>16}")
     per_output = total["effective_loc_per_million_output_tokens"]
@@ -653,7 +665,7 @@ def render_team(summary: dict, usd_brl: float = 0.0) -> str:
     lines.append("POR DESENVOLVEDOR")
     header = (
         f"  {'dev':<14}{'linhas':>8}{'PRs':>5}{'entrada':>10}{'saída':>10}"
-        f"{'grav.cache':>11}{'leit.cache':>11}{'custo':>13}{'US$/linha':>12}{'sem preço':>11}"
+        f"{'grav.cache':>11}{'leit.cache':>11}{'plano':>13}{'se API':>13}{'US$/linha':>12}{'sem preço':>11}"
     )
     lines.append(header)
     for row in summary["developers"]:
@@ -666,6 +678,7 @@ def render_team(summary: dict, usd_brl: float = 0.0) -> str:
             f"{_compact(tokens['cache_write_5m'] + tokens['cache_write_1h']):>11}"
             f"{_compact(tokens['cache_read']):>11}"
             f"{rotlib.format_usd(row['primary_usd']):>13}"
+            f"{rotlib.format_usd(row['api_equivalent_usd']):>13}"
             f"{(rotlib.format_usd(per) if per is not None else '—'):>12}"
             f"{_compact(tokens['unpriced_total']):>11}{flag}"
         )
@@ -691,7 +704,8 @@ def render_team(summary: dict, usd_brl: float = 0.0) -> str:
     lines.append("")
     lines.append("COMO LER")
     lines.append("  - Cada dev mediu só os PRs de autoria dele. Um PR enviado por duas pessoas conta uma vez no total.")
-    lines.append("  - Custo é o plano de cada dev rateado no período (ou o preço de API, para quem paga por token).")
+    lines.append("  - A coluna plano é a mensalidade rateada no período. A coluna se API é o preço de lista dos tokens daquela pessoa.")
+    lines.append("  - O total 'se a equipe pagasse a API' soma a coluna se API. Não é o caixa das assinaturas.")
     lines.append("  - Tokens vêm dos logs locais do Claude Code de cada máquina, sem duplicatas.")
     lines.append("=" * 72)
     return "\n".join(lines)
