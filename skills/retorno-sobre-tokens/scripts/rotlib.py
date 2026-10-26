@@ -159,6 +159,34 @@ def _git(repo: Path, *args: str, text: bool = True) -> subprocess.CompletedProce
     )
 
 
+_MAIN_WORKTREE: dict[str, Path] = {}
+
+
+def main_worktree(root: Path) -> Path:
+    """Uma worktree ligada devolve o checkout principal.
+
+    Várias pastas do mesmo repositório (worktrees de PR, por exemplo) compartilham
+    o ramo de produção. Sem isto, o mesmo PR entraria uma vez por pasta.
+    """
+    resolved = root.resolve()
+    cached = _MAIN_WORKTREE.get(str(resolved))
+    if cached is not None:
+        return cached
+    listed = _git(resolved, "worktree", "list", "--porcelain")
+    chosen = resolved
+    if listed.returncode == 0:
+        for line in listed.stdout.splitlines():
+            if not line.startswith("worktree "):
+                continue
+            candidate = Path(line[len("worktree "):])
+            if candidate.exists():
+                chosen = candidate.resolve()
+            break
+    _MAIN_WORKTREE[str(resolved)] = chosen
+    _MAIN_WORKTREE[str(chosen)] = chosen
+    return chosen
+
+
 def find_git_root(cwd: str | None, cache: dict[str, Path | None]) -> Path | None:
     if not cwd:
         return None
@@ -172,7 +200,7 @@ def find_git_root(cwd: str | None, cache: dict[str, Path | None]) -> Path | None
     if result.returncode != 0:
         cache[cwd] = None
         return None
-    root = Path(result.stdout.strip()).resolve()
+    root = main_worktree(Path(result.stdout.strip()))
     cache[cwd] = root
     return root
 
@@ -487,9 +515,23 @@ def first_author_email(repo: Path, parent: str, tip: str, sha: str) -> str | Non
     return None
 
 
+def production_rev(repo: Path, branch: str) -> str:
+    """Revisão de onde ler o que já está em produção.
+
+    O ramo local pode estar semanas atrás. Se `origin/<ramo>` existe, é ele
+    que vale. O nome curto do ramo continua sendo o que se pede ao GitHub.
+    """
+    if branch.startswith("origin/"):
+        return branch
+    remote = f"refs/remotes/origin/{branch}"
+    if _git(repo, "rev-parse", "--verify", "--quiet", remote).returncode == 0:
+        return f"origin/{branch}"
+    return branch
+
+
 def collect_git_prs(repo: Path, branch: str, start: dt.datetime, end: dt.datetime, cfg: dict) -> list[dict]:
     found = []
-    for commit in iter_first_parent(repo, branch, start, end):
+    for commit in iter_first_parent(repo, production_rev(repo, branch), start, end):
         if not is_shipped_commit(commit["subject"], commit["parents"]):
             continue
         record = pr_record(
@@ -597,7 +639,7 @@ def merge_gh_items(
                 f"{str(sha)[:7]} não está neste clone."
             )
             continue
-        if not is_ancestor(repo, sha, branch):
+        if not is_ancestor(repo, sha, production_rev(repo, branch)):
             warnings.append(
                 f"O PR #{item.get('number')} não está no ramo {branch} deste clone."
             )
@@ -1319,6 +1361,14 @@ def render_text(report: dict) -> str:
     lines.append("CUSTO")
     lines.append(f"  {'Equivalente de API':<32}{format_usd(cost['api_equivalent_usd']):>18}")
     if plan["kind"] == "subscription":
+        lines.append(
+            "    Se estes tokens fossem cobrados pela API (preço de lista), "
+            f"custaria {format_usd(cost['api_equivalent_usd'])}"
+            + (f" ({format_brl(cost['api_equivalent_brl'])})." if cost.get("api_equivalent_brl") else ".")
+        )
+    else:
+        lines.append("    Este plano já cobra o preço de lista da API.")
+    if plan["kind"] == "subscription":
         lines.append(f"  {'Assinatura proporcional':<32}{format_usd(cost['subscription_prorated_usd']):>18}")
         lines.append(
             f"    {format_usd(plan['monthly_usd'])} × {period['days_label']}/{format_number(cost['month_days'], 4)} dias"
@@ -1393,7 +1443,7 @@ def _repo_list(paths: list[Path]) -> list[Path]:
     for path in paths:
         root = find_git_root(str(path), cache)
         if root is None and path.exists() and _git(path, "rev-parse", "--is-inside-work-tree").returncode == 0:
-            root = path
+            root = main_worktree(path)
         if root is None:
             continue
         key = str(root.resolve())

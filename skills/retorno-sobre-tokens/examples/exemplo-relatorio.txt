@@ -34,6 +34,7 @@ CÓDIGO EM PRODUÇÃO
 
 CUSTO
   Equivalente de API                        US$ 4,91
+    Se estes tokens fossem cobrados pela API (preço de lista), custaria US$ 4,91 (R$ 24,76).
   Assinatura proporcional                  US$ 23,00
     US$ 100,00 × 7/30,4375 dias
   Custo usado nos indicadores              US$ 23,00

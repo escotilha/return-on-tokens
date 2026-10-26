@@ -12,8 +12,8 @@ Num período fixo (24 horas, 7 dias, 15 dias ou 30 dias), o ROT junta duas medid
 
 - **Linhas efetivas que foram para produção.** São as linhas dos pull requests de sua autoria que entraram no ramo de produção. Por arquivo, conta o maior valor entre adições e remoções. Assim, uma refatoração que troca 8 linhas por 8 conta 8 (e não 16, nem zero).
 - **Tokens e custo.** Vêm dos logs locais do Claude Code, separados em entrada, saída, gravação de cache e leitura de cache, cada um com o seu preço. O custo aparece de dois jeitos:
-  - o equivalente de API, pela tabela publicada;
-  - se você assina Pro ou Max, a mensalidade rateada no período.
+  - o equivalente de API, pela tabela publicada: o que os mesmos tokens custariam se fossem cobrados pela API;
+  - se você assina Pro ou Max, a mensalidade rateada no período. No modo equipe, cada pessoa tem as duas colunas: o plano e o preço de API.
 
 Daí sai o indicador principal: **custo por linha efetiva**. A moeda base é o dólar. O real aparece por uma taxa de câmbio que você pode editar.
 
@@ -30,7 +30,7 @@ O ROT não é ROI de negócio. Ele não estima salário, hora economizada, recei
 
    Com o GitHub CLI (`gh`) autenticado, a lista de PRs mesclados completa o git. Commit direto no ramo não entra.
 
-3. **Só os seus PRs.** O ROT descobre quem é você por `gh api user` (login do GitHub) e `git config user.email`. Também aceita `--autor` ou o bloco `autores` do config. Os PRs de colegas mesclados no mesmo ramo ficam fora da conta, e o relatório diz quantos foram e quantas linhas tinham. Se o ROT não souber quem é você, nenhum PR conta e ele avisa em voz alta.
+3. **Só os seus PRs.** O ROT descobre quem é você por `gh api user` (login do GitHub) e `git config user.email`. Também aceita `--autor` ou o bloco `autores` do config. Os PRs de colegas mesclados no mesmo ramo ficam fora da conta, e o relatório diz quantos foram e quantas linhas tinham. Se o ROT não souber quem é você, nenhum PR conta e ele avisa em voz alta. Várias pastas do mesmo repositório (worktrees) contam uma vez só.
 
 4. **Linhas efetivas.** Em cada arquivo do diff, conta `max(adições, remoções)`, e os arquivos são somados. Lockfiles, código vendorizado, arquivos gerados e snapshots saem da conta pelo caminho do arquivo.
 
@@ -271,6 +271,7 @@ CÓDIGO EM PRODUÇÃO
 
 CUSTO
   Equivalente de API                        US$ 4,91
+    Se estes tokens fossem cobrados pela API (preço de lista), custaria US$ 4,91 (R$ 24,76).
   Assinatura proporcional                  US$ 23,00
     US$ 100,00 × 7/30,4375 dias
   Custo usado nos indicadores              US$ 23,00

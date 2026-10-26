@@ -432,6 +432,58 @@ class EndToEndTests(unittest.TestCase):
             **{"authors": ["dev@example.com"], **kwargs},
         )
 
+    def test_origin_ahead_of_local_branch_is_counted(self):
+        repo = self.root / "ahead"
+        repo.mkdir()
+        git(repo, "init", "-b", "main")
+        write(repo, "a.py", "a\n")
+        git(repo, "add", "-A")
+        git(repo, "commit", "-m", "base", when="2026-10-01T12:00:00+00:00")
+        base = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
+        git(repo, "checkout", "-b", "feature")
+        write(repo, "b.py", "line\n")
+        git(repo, "add", "-A")
+        git(repo, "commit", "-m", "ship it", when="2026-10-22T12:00:00+00:00")
+        git(repo, "checkout", "main")
+        git(
+            repo, "merge", "--no-ff", "feature",
+            "-m", "Merge pull request #4 from dev/feature",
+            when="2026-10-22T13:00:00+00:00",
+        )
+        tip = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
+        git(repo, "update-ref", "refs/remotes/origin/main", tip)
+        git(repo, "reset", "--hard", base)
+        projects = self.root / "ahead-logs"
+        projects.mkdir()
+        spec = rotlib.plan_spec(self.cfg, "api", None, None)
+        report = rotlib.analyze(
+            now=NOW, period_id="7d", plan=spec, repos=[repo], projects_dir=projects,
+            config=self.cfg, use_gh=False, include_cwd=False, authors=["dev@example.com"],
+        )
+        self.assertEqual([pr["number"] for pr in report["pull_requests"]], [4])
+        self.assertEqual(report["loc"]["effective"], 1)
+        self.assertEqual(report["repos"][0]["branch"], "main")
+
+    def test_linked_worktree_counts_the_repo_once(self):
+        worktree = self.root / "sample-app-wt"
+        git(self.repo, "worktree", "add", "--detach", str(worktree), "HEAD")
+        self.assertEqual(rotlib.find_git_root(str(worktree), {}), self.repo.resolve())
+        spec = rotlib.plan_spec(self.cfg, "max-5x", None, None)
+        report = rotlib.analyze(
+            now=NOW,
+            period_id="7d",
+            plan=spec,
+            repos=[self.repo, worktree],
+            projects_dir=self.projects,
+            config=self.cfg,
+            use_gh=False,
+            include_cwd=False,
+            authors=["dev@example.com"],
+        )
+        self.assertEqual(report["loc"]["effective"], 28)
+        self.assertEqual(len(report["repos"]), 1)
+        self.assertEqual(report["repos"][0]["path"], str(self.repo.resolve()))
+
     def test_seven_days_counts_merged_work_only(self):
         report = self.analyze("7d")
         self.assertEqual(report["loc"]["effective"], 28)
@@ -493,6 +545,7 @@ class EndToEndTests(unittest.TestCase):
         self.assertTrue(any("claude-inexistente" in warning and "SEM PREÇO" in warning for warning in report["warnings"]))
         self.assertIn("Sem preço (fora do custo)", text)
         self.assertIn("Linhas efetivas por milhão de tokens de SAÍDA", text)
+        self.assertIn("Se estes tokens fossem cobrados pela API", text)
         self.assertNotIn("Idem, só repositórios", text)
         self.assertIn("% do custo", text)
 
@@ -542,6 +595,7 @@ class EndToEndTests(unittest.TestCase):
         tip = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
 
         def fetcher(_repo, _branch, _start, _end):
+            self.assertEqual(_branch, "main")
             return [{
                 "number": 5,
                 "title": "Rebase da entrega",
@@ -570,6 +624,19 @@ class EndToEndTests(unittest.TestCase):
         self.assertEqual(pr["loc"]["effective"], 7)
         self.assertEqual(report["loc"]["effective"], 7)
         self.assertTrue(any("logs do Claude Code" in warning for warning in report["warnings"]))
+
+        # O rebase só aparece via GitHub; main local ficou antes da entrega.
+        git(repo, "update-ref", "refs/remotes/origin/main", tip)
+        git(repo, "checkout", "-b", "checkout-de-trabalho")
+        git(repo, "branch", "-f", "main", "HEAD~2")
+        remote_report = rotlib.analyze(
+            now=NOW, period_id="7d", plan=spec, repos=[repo],
+            projects_dir=self.root / "logs-vazios", config=self.cfg,
+            use_gh=True, gh_fetcher=fetcher, include_cwd=False,
+            authors=["dev@example.com"],
+        )
+        self.assertEqual([pr["number"] for pr in remote_report["pull_requests"]], [5])
+        self.assertEqual(remote_report["loc"]["effective"], 7)
 
     def test_gh_failure_falls_back(self):
         def fetcher(*_args):
@@ -861,9 +928,43 @@ class TeamTests(unittest.TestCase):
         self.assertLess(text.index("TOTAL DA EQUIPE"), text.index("POR DESENVOLVEDOR"))
         self.assertIn("dev-c", text.split("POR DESENVOLVEDOR")[1])
         self.assertIn("não enviou", text)
+        self.assertIn("Se estas pessoas pagassem a API", text)
+        self.assertIn("se API", text)
+        self.assertIn(rotlib.format_usd(summary["total"]["api_equivalent_usd"]), text)
         link = rot_equipe.publish_summary(cto, "2026-10-23_7d", text)
         self.assertIn("resumo.md", link)
         self.assertIn("TOTAL DA EQUIPE", self.remote_file("2026-10-23_7d/resumo.md"))
+
+    def test_team_cost_columns_keep_each_developer_values(self):
+        period = {"id": "7d", "start": "2026-10-16T15:00:00+00:00",
+                  "end": "2026-10-23T15:00:00+00:00"}
+        submissions = [
+            {"login": login, "period": period, "tokens": {},
+             "cost": {"primary_usd": primary, "api_equivalent_usd": api},
+             "loc": {"effective": 10}, "plan": {"label": plan},
+             "pull_requests": [{"key": login, "effective": 10}]}
+            for login, primary, api, plan in (
+                ("dev-a", 23.0, 4.5, "Max 5x"),
+                ("dev-b", 46.0, 8.75, "Max 20x"),
+                ("dev-c", 12.0, 12.0, "API"),
+            )
+        ]
+        summary = rot_equipe.consolidate({"period": period}, [], submissions, "teste")
+        text = rot_equipe.render_team(summary)
+        table = text.split("POR DESENVOLVEDOR\n", 1)[1].splitlines()
+        header = table[0]
+        columns = (header.index("plano") + len("plano"),
+                   header.index("se API") + len("se API"))
+        for login, expected_primary, expected_api in (
+            ("dev-a", "US$ 23,00", "US$ 4,50"),
+            ("dev-b", "US$ 46,00", "US$ 8,75"),
+            ("dev-c", "US$ 12,00", "US$ 12,00"),
+        ):
+            row = next(line for line in table if line.strip().startswith(login + " "))
+            self.assertEqual(row[columns[0] - 13:columns[0]].strip(), expected_primary)
+            self.assertEqual(row[columns[1] - 13:columns[1]].strip(), expected_api)
+        total_line = next(line for line in text.splitlines() if line.strip().startswith("API por linha efetiva"))
+        self.assertTrue(total_line.endswith("US$ 0,8417"))
 
     def test_mismatched_period_is_flagged(self):
         self.open(roster=["dev-a", "dev-b"])
