@@ -21,6 +21,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -233,7 +234,9 @@ def round_readme(meta: dict) -> str:
     end = rotlib.format_dt(rotlib.parse_ts(period["end"]))
     command = (
         "python3 ~/.claude/skills/retorno-sobre-tokens/scripts/rot_report.py enviar "
-        f"--rodada {meta['rodada']} --repo-central {meta['repositorio_central']}"
+        f"--rodada {shlex.quote(meta['rodada'])} "
+        f"--repo-central {shlex.quote(meta['repositorio_central'])} "
+        f"--ramo {shlex.quote(meta['ramo'])}"
     )
     roster = ", ".join(meta["roster"]) if meta["roster"] else "(sem lista; qualquer dev pode enviar)"
     plan = meta.get("plano_padrao") or "cada dev informa o seu"
@@ -447,6 +450,8 @@ def submit(
     """Faz a conta do dev no período da rodada e publica <rodada>/<login>.json."""
     if not LOGIN_SAFE.match(login or ""):
         raise TeamError(f"Login inválido para nome de arquivo: {login!r}. Use --login.")
+    if login.casefold() == "rodada":
+        raise TeamError("O login 'rodada' é reservado para os metadados da rodada. Use --login com seu login do GitHub.")
     central.sync()
     meta = load_round(central, rodada)
     if meta is None:

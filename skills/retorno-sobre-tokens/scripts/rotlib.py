@@ -1386,6 +1386,14 @@ def _fmt_optional_number(value: float | None) -> str:
     return format_number(value, 2)
 
 
+def repository_identity(repo: Path) -> str:
+    """Linked worktrees share a Git directory, even with different roots."""
+    result = _git(repo, "rev-parse", "--git-common-dir")
+    if result.returncode == 0 and result.stdout.strip():
+        return str((repo / result.stdout.strip()).resolve())
+    return str(repo.resolve())
+
+
 def _repo_list(paths: list[Path]) -> list[Path]:
     found: list[Path] = []
     seen: set[str] = set()
@@ -1396,7 +1404,7 @@ def _repo_list(paths: list[Path]) -> list[Path]:
             root = path
         if root is None:
             continue
-        key = str(root.resolve())
+        key = repository_identity(root)
         if key in seen:
             continue
         seen.add(key)
@@ -1435,6 +1443,12 @@ def analyze(
         if find_git_root(str(path), root_cache) is None:
             warnings.append(f"{path} não é um repositório git.")
     resolved = _repo_list(repo_inputs)
+    # Attribute worktree sessions to the same representative used for PRs.
+    representatives = {repository_identity(repo): str(repo) for repo in resolved}
+    for session in sessions:
+        if session.get("git_root"):
+            key = repository_identity(Path(session["git_root"]))
+            session["git_root"] = representatives.get(key, session["git_root"])
     if identity is None:
         identity = resolve_identity(config, authors, use_gh, resolved, login_fetcher)
     if not identity["logins"] and not identity["emails"]:
