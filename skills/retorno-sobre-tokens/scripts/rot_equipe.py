@@ -704,7 +704,7 @@ def render_team(summary: dict, usd_brl: float = 0.0) -> str:
     lines.append("")
     lines.append("COMO LER")
     lines.append("  - Cada dev mediu só os PRs de autoria dele. Um PR enviado por duas pessoas conta uma vez no total.")
-    lines.append("  - A coluna plano é a mensalidade rateada no período. A coluna se API é o preço de lista dos tokens daquela pessoa.")
+    lines.append("  - A coluna plano é a mensalidade rateada no período, ou o custo dos tokens para quem usa API. A coluna se API é o preço de lista dos tokens daquela pessoa.")
     lines.append("  - O total 'se a equipe pagasse a API' soma a coluna se API. Não é o caixa das assinaturas.")
     lines.append("  - Tokens vêm dos logs locais do Claude Code de cada máquina, sem duplicatas.")
     lines.append("=" * 72)

@@ -595,6 +595,7 @@ class EndToEndTests(unittest.TestCase):
         tip = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
 
         def fetcher(_repo, _branch, _start, _end):
+            self.assertEqual(_branch, "main")
             return [{
                 "number": 5,
                 "title": "Rebase da entrega",
@@ -623,6 +624,19 @@ class EndToEndTests(unittest.TestCase):
         self.assertEqual(pr["loc"]["effective"], 7)
         self.assertEqual(report["loc"]["effective"], 7)
         self.assertTrue(any("logs do Claude Code" in warning for warning in report["warnings"]))
+
+        # O rebase só aparece via GitHub; main local ficou antes da entrega.
+        git(repo, "update-ref", "refs/remotes/origin/main", tip)
+        git(repo, "checkout", "-b", "checkout-de-trabalho")
+        git(repo, "branch", "-f", "main", "HEAD~2")
+        remote_report = rotlib.analyze(
+            now=NOW, period_id="7d", plan=spec, repos=[repo],
+            projects_dir=self.root / "logs-vazios", config=self.cfg,
+            use_gh=True, gh_fetcher=fetcher, include_cwd=False,
+            authors=["dev@example.com"],
+        )
+        self.assertEqual([pr["number"] for pr in remote_report["pull_requests"]], [5])
+        self.assertEqual(remote_report["loc"]["effective"], 7)
 
     def test_gh_failure_falls_back(self):
         def fetcher(*_args):
@@ -920,6 +934,37 @@ class TeamTests(unittest.TestCase):
         link = rot_equipe.publish_summary(cto, "2026-10-23_7d", text)
         self.assertIn("resumo.md", link)
         self.assertIn("TOTAL DA EQUIPE", self.remote_file("2026-10-23_7d/resumo.md"))
+
+    def test_team_cost_columns_keep_each_developer_values(self):
+        period = {"id": "7d", "start": "2026-10-16T15:00:00+00:00",
+                  "end": "2026-10-23T15:00:00+00:00"}
+        submissions = [
+            {"login": login, "period": period, "tokens": {},
+             "cost": {"primary_usd": primary, "api_equivalent_usd": api},
+             "loc": {"effective": 10}, "plan": {"label": plan},
+             "pull_requests": [{"key": login, "effective": 10}]}
+            for login, primary, api, plan in (
+                ("dev-a", 23.0, 4.5, "Max 5x"),
+                ("dev-b", 46.0, 8.75, "Max 20x"),
+                ("dev-c", 12.0, 12.0, "API"),
+            )
+        ]
+        summary = rot_equipe.consolidate({"period": period}, [], submissions, "teste")
+        text = rot_equipe.render_team(summary)
+        table = text.split("POR DESENVOLVEDOR\n", 1)[1].splitlines()
+        header = table[0]
+        columns = (header.index("plano") + len("plano"),
+                   header.index("se API") + len("se API"))
+        for login, expected_primary, expected_api in (
+            ("dev-a", "US$ 23,00", "US$ 4,50"),
+            ("dev-b", "US$ 46,00", "US$ 8,75"),
+            ("dev-c", "US$ 12,00", "US$ 12,00"),
+        ):
+            row = next(line for line in table if line.strip().startswith(login + " "))
+            self.assertEqual(row[columns[0] - 13:columns[0]].strip(), expected_primary)
+            self.assertEqual(row[columns[1] - 13:columns[1]].strip(), expected_api)
+        total_line = next(line for line in text.splitlines() if line.strip().startswith("API por linha efetiva"))
+        self.assertTrue(total_line.endswith("US$ 0,8417"))
 
     def test_mismatched_period_is_flagged(self):
         self.open(roster=["dev-a", "dev-b"])
