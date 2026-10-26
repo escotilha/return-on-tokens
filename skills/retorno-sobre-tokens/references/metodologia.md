@@ -26,6 +26,8 @@ O ramo de produção é o primeiro desta lista que existir:
 3. `origin/HEAD`;
 4. `main`, `master` ou `trunk`.
 
+O histórico lido é `origin/<ramo>` quando essa referência existe no clone. O ramo local com o mesmo nome pode estar atrás do que já foi para o remoto, e a conta usa o remoto. Sem `origin/<ramo>`, vale o ramo local.
+
 No histórico de primeiro pai desse ramo, entram:
 
 - commits de merge (com dois ou mais pais), com o que o merge trouxe em relação ao primeiro pai;

@@ -432,6 +432,38 @@ class EndToEndTests(unittest.TestCase):
             **{"authors": ["dev@example.com"], **kwargs},
         )
 
+    def test_origin_ahead_of_local_branch_is_counted(self):
+        repo = self.root / "ahead"
+        repo.mkdir()
+        git(repo, "init", "-b", "main")
+        write(repo, "a.py", "a\n")
+        git(repo, "add", "-A")
+        git(repo, "commit", "-m", "base", when="2026-10-01T12:00:00+00:00")
+        base = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
+        git(repo, "checkout", "-b", "feature")
+        write(repo, "b.py", "line\n")
+        git(repo, "add", "-A")
+        git(repo, "commit", "-m", "ship it", when="2026-10-22T12:00:00+00:00")
+        git(repo, "checkout", "main")
+        git(
+            repo, "merge", "--no-ff", "feature",
+            "-m", "Merge pull request #4 from dev/feature",
+            when="2026-10-22T13:00:00+00:00",
+        )
+        tip = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
+        git(repo, "update-ref", "refs/remotes/origin/main", tip)
+        git(repo, "reset", "--hard", base)
+        projects = self.root / "ahead-logs"
+        projects.mkdir()
+        spec = rotlib.plan_spec(self.cfg, "api", None, None)
+        report = rotlib.analyze(
+            now=NOW, period_id="7d", plan=spec, repos=[repo], projects_dir=projects,
+            config=self.cfg, use_gh=False, include_cwd=False, authors=["dev@example.com"],
+        )
+        self.assertEqual([pr["number"] for pr in report["pull_requests"]], [4])
+        self.assertEqual(report["loc"]["effective"], 1)
+        self.assertEqual(report["repos"][0]["branch"], "main")
+
     def test_linked_worktree_counts_the_repo_once(self):
         worktree = self.root / "sample-app-wt"
         git(self.repo, "worktree", "add", "--detach", str(worktree), "HEAD")

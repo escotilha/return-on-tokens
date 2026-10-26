@@ -515,9 +515,23 @@ def first_author_email(repo: Path, parent: str, tip: str, sha: str) -> str | Non
     return None
 
 
+def production_rev(repo: Path, branch: str) -> str:
+    """Revisão de onde ler o que já está em produção.
+
+    O ramo local pode estar semanas atrás. Se `origin/<ramo>` existe, é ele
+    que vale. O nome curto do ramo continua sendo o que se pede ao GitHub.
+    """
+    if branch.startswith("origin/"):
+        return branch
+    remote = f"refs/remotes/origin/{branch}"
+    if _git(repo, "rev-parse", "--verify", "--quiet", remote).returncode == 0:
+        return f"origin/{branch}"
+    return branch
+
+
 def collect_git_prs(repo: Path, branch: str, start: dt.datetime, end: dt.datetime, cfg: dict) -> list[dict]:
     found = []
-    for commit in iter_first_parent(repo, branch, start, end):
+    for commit in iter_first_parent(repo, production_rev(repo, branch), start, end):
         if not is_shipped_commit(commit["subject"], commit["parents"]):
             continue
         record = pr_record(
@@ -625,7 +639,7 @@ def merge_gh_items(
                 f"{str(sha)[:7]} não está neste clone."
             )
             continue
-        if not is_ancestor(repo, sha, branch):
+        if not is_ancestor(repo, sha, production_rev(repo, branch)):
             warnings.append(
                 f"O PR #{item.get('number')} não está no ramo {branch} deste clone."
             )
