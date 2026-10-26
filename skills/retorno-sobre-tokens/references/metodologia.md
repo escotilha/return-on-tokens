@@ -184,7 +184,7 @@ mensalidade em USD × (dias do período / 30,4375)
 
 Na assinatura, o indicador "custo por linha efetiva" usa o caixa proporcional. O relatório também diz, em frase própria, quanto os mesmos tokens custariam se fossem cobrados pela API ao preço de lista. Na API sob demanda, os dois números são o mesmo.
 
-No modo equipe, o total traz essa frase para o grupo, e a tabela por dev tem duas colunas: `plano` (a mensalidade rateada) e `se API` (o preço de lista daquela pessoa). A linha "API por linha efetiva" divide o preço de lista da equipe pelas linhas efetivas dos PRs únicos.
+No modo equipe, o total traz essa frase para o grupo, e a tabela por dev tem duas colunas: `plano` (a mensalidade rateada, ou o custo dos tokens para quem usa API) e `se API` (o preço de lista daquela pessoa). A linha "API por linha efetiva" divide o preço de lista da equipe pelas linhas efetivas dos PRs únicos.
 
 O real é `dólar × usd_brl`. A taxa do config é a PTAX venda do Banco Central de 22/10/2026: 5,0383. Não há consulta ao vivo. `null`, `0` ou `--exchange-rate 0` desligam o real.
 
