@@ -1,0 +1,29 @@
+name: Bug ou sugestão da ferramenta
+description: Relate um problema do ROT sem incluir resultados reais.
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Não envie relatórios ROT, JSONs reais, tokens de acesso, caminhos locais ou informações internas aqui.
+        Para resultados de equipe, peça ao CTO o link de uma rodada privada; consulte o README.
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacidade
+      options:
+        - label: Este relato não contém resultados ROT reais nem informações internas; uso somente dados sintéticos.
+          required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Problema ou sugestão
+      description: Descreva o esperado e o observado. Não cole o relatório real.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Como reproduzir com dados sintéticos
+      description: Use nomes e números fictícios; remova caminhos pessoais e links internos.
+    validations:
+      required: true

@@ -61,6 +61,18 @@ ln -s "$(pwd)/skills/retorno-sobre-tokens" ~/.claude/skills/retorno-sobre-tokens
 
 Preços, mensalidades, câmbio, apelidos de modelo, autores, ramo de produção, listas de exclusão e o bloco `equipe` ficam em `skills/retorno-sobre-tokens/scripts/rot_config.json`. Vale abrir esse arquivo uma vez e conferir.
 
+## Onde ficam os resultados
+
+**Issues, pull requests e comentários deste repositório não são um canal de envio de resultados ROT.** Use issues para bugs e sugestões da ferramenta, com exemplos sintéticos e sem relatórios reais.
+
+- **Individual:** o relatório fica na sua máquina; rodar o ROT não abre uma issue nem envia o resultado ao GitHub.
+- **Equipe:** peça ao CTO o link da rodada em um repositório central **privado e separado deste repositório de código**. Use `exportar --rodada <id>` para conferir o JSON e `enviar --rodada <id>` para gravar o arquivo da rodada após confirmar sua identidade. O envio é um commit/push, não uma issue ou PR.
+- **Sem destino privado confirmado:** não publique. Peça o link ao responsável pela rodada. Não substitua o envio por `gh issue create`, comentários ou anexos de relatório neste repositório.
+
+O JSON individual completo pode conter caminhos locais, nomes de projetos e detalhes de PRs. O exportador de equipe remove caminhos locais e prompts, mas ainda contém números e referências de trabalho; mantenha o destino privado. Atualize cópias já instaladas da skill para receber estas instruções. Prompts externos antigos que pedem envio por issue também precisam ser corrigidos.
+
+O formulário de issues orienta o uso correto; não é uma barreira de segurança contra publicação por API ou por quem tem acesso de escrita.
+
 ## Como usar
 
 O jeito mais fácil é pedir ao Claude Code: "quero ver o meu ROT". A skill pergunta antes se você vai medir sozinho, enviar para uma rodada da equipe ou consolidar a equipe. Abaixo estão os três caminhos pelo terminal.
