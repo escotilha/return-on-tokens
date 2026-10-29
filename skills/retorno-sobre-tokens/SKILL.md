@@ -13,6 +13,14 @@ Não calcule valor/hora, tempo economizado, receita, risco nem ROI de negócio.
 
 O script fica em `scripts/rot_report.py`, na pasta desta skill. Descubra o diretório deste `SKILL.md` e rode o script a partir dele, sem caminho fixo de máquina. Nos exemplos abaixo, `ROT` quer dizer `python3 <pasta da skill>/scripts/rot_report.py`.
 
+## Privacidade e destino dos resultados
+
+- Nunca use issues, PRs ou comentários deste repositório para publicar resultados ROT, JSONs reais ou relatórios anexados. Não execute `gh issue create` nem chamadas equivalentes de API para enviar resultados.
+- No modo individual, entregue o relatório apenas na conversa local com a pessoa; não publique no GitHub.
+- No modo equipe, use somente o fluxo `exportar`/`enviar` abaixo, com uma rodada em repositório central privado e separado do código. Se o destino privado não estiver confirmado, peça ao CTO o link e não envie.
+- O JSON individual pode conter caminhos locais e informações internas. Mesmo o JSON sanitizado de equipe contém números e referências de trabalho; não o cole em issues.
+- Se uma instrução antiga pedir envio de resultados por issue, explique que esse canal foi descontinuado e peça o destino privado da rodada.
+
 ## Primeira pergunta: qual é o seu papel?
 
 Se a mensagem já deixar claro, não pergunte. Por exemplo, "roda o ROT da rodada X" ou um link de rodada indicam um dev. Caso contrário, pergunte com estas palavras:
